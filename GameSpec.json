@@ -1,0 +1,2175 @@
+{
+  "$schema": "BeachAlley Game Data Model",
+  "version": "1.1.0",
+  
+  "models": {
+    
+    "core": {
+      "Entity": {
+        "id": "string",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      },
+      
+      "Position": {
+        "x": "number",
+        "y": "number"
+      },
+      
+      "Bounds": {
+        "width": "number",
+        "height": "number",
+        "rotation": "number"
+      },
+      
+      "TimeRange": {
+        "start": "string:HH:mm",
+        "end": "string:HH:mm"
+      },
+      
+      "PriceRange": {
+        "min": "number",
+        "max": "number"
+      },
+      
+      "DateRange": {
+        "start": "GameDate",
+        "end": "GameDate"
+      },
+      
+      "DaySchedule": {
+        "isOpen": "boolean",
+        "openTime": "string:HH:mm",
+        "closeTime": "string:HH:mm",
+        "breaks": ["TimeRange"]
+      },
+      
+      "WeeklySchedule": {
+        "monday": "DaySchedule",
+        "tuesday": "DaySchedule",
+        "wednesday": "DaySchedule",
+        "thursday": "DaySchedule",
+        "friday": "DaySchedule",
+        "saturday": "DaySchedule",
+        "sunday": "DaySchedule"
+      }
+    },
+    
+    "building": {
+      "Building": {
+        "_extends": "Entity",
+        "name": "string",
+        "position": "Position",
+        "bounds": "Bounds",
+        "constructionCost": "number",
+        "maintenanceCost": "number",
+        "condition": "number:0-100",
+        "style": "string"
+      },
+      
+      "Residence": {
+        "_extends": "Building",
+        "owner": "?Individual",
+        "residents": ["Individual"],
+        "maxOccupants": "number",
+        "monthlyRent": "number",
+        "propertyValue": "number",
+        "amenities": ["ResidenceAmenity"],
+        "privacyLevel": "number:1-5",
+        "viewQuality": "number:0-100",
+        "beachAccess": "boolean"
+      },
+      
+      "ResidenceAmenity": {
+        "_extends": "Entity",
+        "name": "string",
+        "installCost": "number",
+        "maintenanceCost": "number",
+        "satisfactionBonus": "number",
+        "propertyValueBonus": "number"
+      },
+      
+      "Facility": {
+        "_extends": "Building",
+        "publicAccess": "boolean",
+        "serviceRadius": "number",
+        "capacityPerHour": "number",
+        "operatingCost": "number"
+      },
+      
+      "Road": {
+        "_extends": "Facility",
+        "lanes": "number",
+        "speedLimit": "number",
+        "pedestrianOnly": "boolean",
+        "surfaceQuality": "number:0-100",
+        "connectedRoads": ["Road"]
+      }
+    },
+    
+    "resource": {
+      "_description": "Supply chain and resource management system",
+      
+      "Resource": {
+        "_extends": "Entity",
+        "_description": "Base resource type (ingredients, goods, materials)",
+        "name": "string",
+        "category": "ResourceCategory",
+        "unit": "string",
+        "basePrice": "number",
+        "priceVolatility": "number:0-100",
+        "perishable": "boolean",
+        "shelfLife": "?number:days",
+        "storageRequirements": "StorageRequirements",
+        "seasonalAvailability": "?SeasonalAvailability",
+        "qualityGrades": ["QualityGrade"]
+      },
+      
+      "ResourceCategory": {
+        "_extends": "Entity",
+        "name": "string",
+        "parentCategory": "?ResourceCategory",
+        "storageType": "enum:ambient|refrigerated|frozen|live|dry",
+        "handlingRequirements": "string"
+      },
+      
+      "QualityGrade": {
+        "_extends": "Entity",
+        "name": "string",
+        "tier": "number:1-5",
+        "priceMultiplier": "number",
+        "shelfLifeMultiplier": "number"
+      },
+      
+      "StorageRequirements": {
+        "temperatureRange": "?PriceRange",
+        "humidity": "?PriceRange",
+        "specialConditions": ["string"]
+      },
+      
+      "SeasonalAvailability": {
+        "peakMonths": ["number:1-12"],
+        "availableMonths": ["number:1-12"],
+        "peakPriceMultiplier": "number",
+        "offSeasonPriceMultiplier": "number"
+      },
+      
+      "ResourceStock": {
+        "_extends": "Entity",
+        "resource": "Resource",
+        "quantity": "number",
+        "qualityGrade": "QualityGrade",
+        "purchasePrice": "number",
+        "purchaseDate": "timestamp",
+        "expiryDate": "?timestamp",
+        "supplier": "?Supplier"
+      },
+      
+      "Inventory": {
+        "_extends": "Entity",
+        "owner": "Establishment",
+        "stocks": ["ResourceStock"],
+        "storageCapacity": "StorageCapacity",
+        "reorderRules": ["ReorderRule"]
+      },
+      
+      "StorageCapacity": {
+        "ambient": "number",
+        "refrigerated": "number",
+        "frozen": "number",
+        "live": "number"
+      },
+      
+      "ReorderRule": {
+        "resource": "Resource",
+        "minimumStock": "number",
+        "reorderQuantity": "number",
+        "preferredSupplier": "?Supplier",
+        "maxPrice": "?number",
+        "autoOrder": "boolean"
+      }
+    },
+    
+    "supply_chain": {
+      "_description": "B2B supply between establishments",
+      
+      "Supplier": {
+        "_extends": "Establishment",
+        "_abstract": true,
+        "suppliedResources": ["SuppliedResource"],
+        "deliverySchedule": "WeeklySchedule",
+        "deliveryRadius": "number",
+        "minimumOrderValue": "number",
+        "paymentTerms": "PaymentTerms",
+        "reliabilityRating": "number:0-100",
+        "contracts": ["SupplyContract"]
+      },
+      
+      "SuppliedResource": {
+        "resource": "Resource",
+        "availableGrades": ["QualityGrade"],
+        "pricePerUnit": "number",
+        "minOrderQuantity": "number",
+        "maxDailyCapacity": "number",
+        "leadTime": "number:hours"
+      },
+      
+      "PaymentTerms": {
+        "type": "enum:prepaid|on_delivery|net_7|net_15|net_30",
+        "creditLimit": "?number",
+        "earlyPaymentDiscount": "?number"
+      },
+      
+      "SupplyContract": {
+        "_extends": "Entity",
+        "supplier": "Supplier",
+        "buyer": "Establishment",
+        "resources": ["ContractedResource"],
+        "startDate": "GameDate",
+        "endDate": "?GameDate",
+        "status": "enum:pending|active|suspended|terminated",
+        "exclusivity": "boolean",
+        "volumeCommitment": "?VolumeCommitment",
+        "priceAgreement": "PriceAgreement"
+      },
+      
+      "ContractedResource": {
+        "resource": "Resource",
+        "qualityGrade": "QualityGrade",
+        "agreedPrice": "number",
+        "deliveryFrequency": "enum:daily|twice_weekly|weekly|on_demand"
+      },
+      
+      "VolumeCommitment": {
+        "minimumWeekly": "number",
+        "maximumWeekly": "number",
+        "penaltyForUnderOrder": "number"
+      },
+      
+      "PriceAgreement": {
+        "type": "enum:fixed|market_linked|seasonal_adjusted",
+        "basePrice": "number",
+        "marketLinkPercentage": "?number",
+        "reviewFrequency": "?string"
+      },
+      
+      "SupplyOrder": {
+        "_extends": "Entity",
+        "contract": "?SupplyContract",
+        "supplier": "Supplier",
+        "buyer": "Establishment",
+        "items": ["OrderItem"],
+        "status": "enum:placed|confirmed|in_transit|delivered|cancelled",
+        "orderDate": "timestamp",
+        "expectedDelivery": "timestamp",
+        "actualDelivery": "?timestamp",
+        "totalCost": "number",
+        "qualityOnDelivery": "?number:0-100"
+      },
+      
+      "OrderItem": {
+        "resource": "Resource",
+        "quantity": "number",
+        "qualityGrade": "QualityGrade",
+        "unitPrice": "number"
+      },
+      
+      "Fisher": {
+        "_extends": "Supplier",
+        "boatType": "BoatType",
+        "fishingMethod": "FishingMethod",
+        "catchCapacity": "number:kg_per_day",
+        "operatingZone": "string",
+        "weatherDependency": "WeatherDependency",
+        "certifications": ["string"],
+        "sustainabilityRating": "number:0-100"
+      },
+      
+      "BoatType": {
+        "_extends": "Entity",
+        "name": "string",
+        "capacity": "number",
+        "range": "number:km",
+        "fuelCost": "number:per_day",
+        "crewRequired": "number"
+      },
+      
+      "FishingMethod": {
+        "_extends": "Entity",
+        "name": "string",
+        "targetSpecies": ["Resource"],
+        "byatchRisk": "number:0-100",
+        "sustainabilityImpact": "number:-100-100"
+      },
+      
+      "Farmer": {
+        "_extends": "Supplier",
+        "farmType": "enum:produce|dairy|livestock|mixed",
+        "landSize": "number:hectares",
+        "irrigated": "boolean",
+        "organic": "boolean",
+        "certifications": ["string"],
+        "harvestSchedule": ["HarvestPeriod"]
+      },
+      
+      "HarvestPeriod": {
+        "resource": "Resource",
+        "startMonth": "number:1-12",
+        "endMonth": "number:1-12",
+        "peakWeeks": ["number:1-52"]
+      },
+      
+      "Wholesaler": {
+        "_extends": "Supplier",
+        "warehouseCapacity": "StorageCapacity",
+        "sourcingRegions": ["string"],
+        "importCapability": "boolean",
+        "coldChainCertified": "boolean"
+      },
+      
+      "Artisan": {
+        "_extends": "Supplier",
+        "_description": "Craftspeople producing specialty goods (baker, butcher, etc.)",
+        "specialty": "string",
+        "productionCapacity": "number:units_per_day",
+        "customOrdersAccepted": "boolean",
+        "leadTimeForCustom": "number:days"
+      }
+    },
+    
+    "market": {
+      "_description": "Market establishments where suppliers sell directly",
+      
+      "Market": {
+        "_extends": "Establishment",
+        "marketType": "MarketType",
+        "stalls": ["MarketStall"],
+        "operatingDays": ["number:0-6"],
+        "stallRentalFee": "number:per_day",
+        "visitorCapacity": "number",
+        "parkingSpaces": "number",
+        "amenities": ["MarketAmenity"]
+      },
+      
+      "MarketType": {
+        "_extends": "Entity",
+        "name": "string",
+        "frequency": "enum:daily|weekly|monthly|seasonal|special",
+        "primaryGoods": ["ResourceCategory"],
+        "atmosphere": "string",
+        "touristAppeal": "number:0-100"
+      },
+      
+      "MarketStall": {
+        "_extends": "Entity",
+        "location": "Position",
+        "size": "enum:small|medium|large",
+        "covered": "boolean",
+        "hasRefrigeration": "boolean",
+        "hasPower": "boolean",
+        "rentalPrice": "number:per_day",
+        "currentVendor": "?MarketVendor",
+        "reservations": ["StallReservation"]
+      },
+      
+      "MarketVendor": {
+        "_extends": "Entity",
+        "supplier": "?Supplier",
+        "individual": "?Individual",
+        "vendorType": "enum:producer|reseller|artisan|food_stall",
+        "offerings": ["VendorOffering"],
+        "reputation": "Reputation",
+        "regularStall": "?MarketStall",
+        "priceNegotiable": "boolean"
+      },
+      
+      "VendorOffering": {
+        "resource": "Resource",
+        "qualityGrade": "QualityGrade",
+        "pricePerUnit": "number",
+        "availableQuantity": "number",
+        "isOrganic": "boolean",
+        "isLocal": "boolean"
+      },
+      
+      "StallReservation": {
+        "_extends": "Entity",
+        "stall": "MarketStall",
+        "vendor": "MarketVendor",
+        "date": "GameDate",
+        "paid": "boolean",
+        "status": "enum:reserved|confirmed|cancelled|no_show"
+      },
+      
+      "MarketAmenity": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "enum:seating|restroom|atm|info_booth|entertainment|food_court",
+        "capacity": "?number"
+      },
+      
+      "Caravan": {
+        "_extends": "Establishment",
+        "_description": "Mobile/traveling market or food vendor",
+        "vehicleType": "VehicleType",
+        "route": ["CaravanStop"],
+        "offerings": ["VendorOffering"],
+        "operatingSchedule": "WeeklySchedule",
+        "socialMediaPresence": "SocialPresence"
+      },
+      
+      "VehicleType": {
+        "_extends": "Entity",
+        "name": "string",
+        "capacity": "number",
+        "hasRefrigeration": "boolean",
+        "hasCookingFacility": "boolean",
+        "fuelCost": "number:per_km",
+        "maintenanceCost": "number:per_month"
+      },
+      
+      "CaravanStop": {
+        "location": "Position",
+        "zone": "string",
+        "arrivalTime": "string:HH:mm",
+        "departureTime": "string:HH:mm",
+        "daysOfWeek": ["number:0-6"],
+        "permitRequired": "boolean",
+        "permitCost": "?number"
+      }
+    },
+    
+    "establishment": {
+      "Establishment": {
+        "_extends": "Building",
+        "_abstract": true,
+        "brandName": "string",
+        "description": "string",
+        "foundedDate": "timestamp",
+        "status": "enum:closed|open|renovating|peak",
+        "schedule": "WeeklySchedule",
+        "capacity": "Capacity",
+        "staff": ["StaffAssignment"],
+        "priceLevel": "number:1-5",
+        "features": ["EstablishmentFeature"],
+        "restrictions": ["EstablishmentRestriction"],
+        "reputation": "Reputation",
+        "financials": "EstablishmentFinancials",
+        "inventory": "?Inventory",
+        "supplyContracts": ["SupplyContract"],
+        "socialPresence": "?SocialPresence"
+      },
+      
+      "Capacity": {
+        "total": "number",
+        "seated": "number",
+        "standing": "number",
+        "outdoor": "number",
+        "current": "number"
+      },
+      
+      "EstablishmentFeature": {
+        "_extends": "Entity",
+        "name": "string",
+        "installCost": "number",
+        "maintenanceCost": "number",
+        "attractivenessBonus": "number",
+        "targetDemographics": ["PeopleCategory"]
+      },
+      
+      "EstablishmentRestriction": {
+        "_extends": "Entity",
+        "name": "string",
+        "minimumAge": "?number",
+        "requiresReservation": "boolean",
+        "requiresMembership": "boolean",
+        "dressCode": "?string"
+      },
+      
+      "Reputation": {
+        "averageRating": "number:0-5",
+        "totalReviews": "number",
+        "trendingScore": "number:0-100",
+        "categoryRank": "number",
+        "socialBuzz": "number:0-100",
+        "mediaExposure": "number:0-100"
+      },
+      
+      "EstablishmentFinancials": {
+        "dailyRevenue": "number",
+        "dailyCosts": "number",
+        "profitMargin": "number",
+        "supplyCosts": "number"
+      },
+      
+      "StaffAssignment": {
+        "staff": "StaffMember",
+        "role": "StaffRole",
+        "schedule": "WeeklySchedule"
+      },
+      
+      "SocialPresence": {
+        "_description": "Establishment's social media presence",
+        "handles": ["SocialHandle"],
+        "totalFollowers": "number",
+        "engagementRate": "number:0-100",
+        "postFrequency": "enum:never|rare|weekly|daily|multiple_daily",
+        "responseTime": "enum:none|slow|moderate|fast|instant",
+        "verifiedAccount": "boolean"
+      },
+      
+      "SocialHandle": {
+        "platform": "SocialPlatform",
+        "handle": "string",
+        "followers": "number",
+        "verified": "boolean"
+      }
+    },
+    
+    "establishment_types": {
+      
+      "Restaurant": {
+        "_extends": "Establishment",
+        "cuisineType": "CuisineType",
+        "menu": "Menu",
+        "averageMealDuration": "number:minutes",
+        "turnoverRate": "number",
+        "kitchenCapacity": "number",
+        "hasWaiterService": "boolean",
+        "hasBarArea": "boolean",
+        "hasTerrace": "boolean",
+        "healthRating": "string:A|B|C",
+        "happyHour": "?HappyHour",
+        "chefProfile": "?ChefProfile"
+      },
+      
+      "ChefProfile": {
+        "_extends": "Entity",
+        "name": "string",
+        "specialty": "CuisineType",
+        "experience": "number:years",
+        "awards": ["Award"],
+        "mediaAppearances": "number",
+        "socialFollowing": "number",
+        "signatureDishes": ["MenuItem"]
+      },
+      
+      "Award": {
+        "_extends": "Entity",
+        "name": "string",
+        "organization": "string",
+        "year": "number",
+        "prestige": "number:1-5"
+      },
+      
+      "CuisineType": {
+        "_extends": "Entity",
+        "name": "string",
+        "originRegion": "string",
+        "typicalResources": ["Resource"],
+        "priceMultiplier": "number",
+        "preparationComplexity": "number:1-5"
+      },
+      
+      "Menu": {
+        "_extends": "Entity",
+        "sections": ["MenuSection"],
+        "lastUpdated": "timestamp",
+        "seasonalRotation": "boolean"
+      },
+      
+      "MenuSection": {
+        "_extends": "Entity",
+        "name": "string",
+        "displayOrder": "number",
+        "availableHours": "?TimeRange",
+        "items": ["MenuItem"]
+      },
+      
+      "MenuItem": {
+        "_extends": "Entity",
+        "name": "string",
+        "description": "string",
+        "price": "number",
+        "recipe": "Recipe",
+        "preparationTime": "number:minutes",
+        "dietary": ["DietaryTag"],
+        "allergens": ["string"],
+        "popularity": "number:0-100",
+        "isSignature": "boolean",
+        "isAvailable": "boolean",
+        "photoUrl": "?string"
+      },
+      
+      "Recipe": {
+        "_extends": "Entity",
+        "ingredients": ["RecipeIngredient"],
+        "productionCost": "number",
+        "skillRequired": "number:1-5",
+        "equipmentRequired": ["string"]
+      },
+      
+      "RecipeIngredient": {
+        "resource": "Resource",
+        "quantity": "number",
+        "qualityMinimum": "QualityGrade",
+        "substitutes": ["Resource"]
+      },
+      
+      "DietaryTag": {
+        "_extends": "Entity",
+        "name": "string",
+        "icon": "string",
+        "description": "string"
+      },
+      
+      "HappyHour": {
+        "enabled": "boolean",
+        "days": ["number:0-6"],
+        "timeRange": "TimeRange",
+        "discountPercent": "number",
+        "applicableCategories": ["MenuSection"]
+      },
+      
+      "Bar": {
+        "_extends": "Establishment",
+        "drinkMenu": "DrinkMenu",
+        "minimumAge": "number",
+        "hasIdCheck": "boolean",
+        "dressCode": "?string",
+        "coverCharge": "?number",
+        "atmosphere": "BarAtmosphere",
+        "entertainment": "BarEntertainment",
+        "happyHour": "?HappyHour"
+      },
+      
+      "DrinkMenu": {
+        "_extends": "Entity",
+        "cocktails": ["DrinkItem"],
+        "beers": ["DrinkItem"],
+        "wines": ["DrinkItem"],
+        "spirits": ["DrinkItem"],
+        "nonAlcoholic": ["DrinkItem"]
+      },
+      
+      "DrinkItem": {
+        "_extends": "Entity",
+        "name": "string",
+        "description": "string",
+        "price": "number",
+        "recipe": "?Recipe",
+        "alcoholContent": "?number:percentage",
+        "glassType": "string",
+        "garnish": "?string",
+        "preparationTime": "number:seconds",
+        "popularity": "number:0-100",
+        "isSignature": "boolean"
+      },
+      
+      "BarAtmosphere": {
+        "musicGenres": ["MusicGenre"],
+        "noiseLevel": "enum:quiet|moderate|loud|very_loud",
+        "lightingMood": "enum:bright|ambient|dim|dark",
+        "decorStyle": "string"
+      },
+      
+      "MusicGenre": {
+        "_extends": "Entity",
+        "name": "string",
+        "bpmRange": "PriceRange",
+        "targetAge": "PriceRange",
+        "energyLevel": "number:1-5"
+      },
+      
+      "BarEntertainment": {
+        "hasLiveMusic": "boolean",
+        "hasDJ": "boolean",
+        "hasDanceFloor": "boolean",
+        "hasPoolTable": "boolean",
+        "hasDarts": "boolean",
+        "hasTVScreens": "boolean",
+        "hasKaraoke": "boolean"
+      },
+      
+      "BeachClub": {
+        "_extends": "Establishment",
+        "sunbeds": "RentalInventory",
+        "umbrellas": "RentalInventory",
+        "cabanas": "RentalInventory",
+        "vipSection": "?VIPSection",
+        "pool": "?PoolFacility",
+        "minimumSpend": "?number",
+        "towelService": "boolean",
+        "conciergeService": "boolean",
+        "djSchedule": "?WeeklySchedule",
+        "foodService": "?Restaurant",
+        "barService": "?Bar"
+      },
+      
+      "RentalInventory": {
+        "itemType": "string",
+        "totalCount": "number",
+        "availableCount": "number",
+        "hourlyRate": "number",
+        "halfDayRate": "number",
+        "fullDayRate": "number",
+        "condition": "number:0-100",
+        "maintenanceInterval": "number:days"
+      },
+      
+      "VIPSection": {
+        "capacity": "number",
+        "minimumSpend": "number",
+        "pricePerDay": "number",
+        "amenities": ["string"],
+        "privateService": "boolean"
+      },
+      
+      "PoolFacility": {
+        "type": "enum:infinity|lap|kids|plunge|freeform",
+        "capacity": "number",
+        "depth": "PriceRange",
+        "heated": "boolean",
+        "lifeguardRequired": "boolean"
+      },
+      
+      "WaterSportsCenter": {
+        "_extends": "Establishment",
+        "equipment": ["EquipmentInventory"],
+        "lessons": ["LessonOffering"],
+        "tours": ["GuidedTour"],
+        "certifications": ["string"],
+        "weatherDependencies": "WeatherDependency",
+        "safetyRequirements": "SafetyRequirements"
+      },
+      
+      "EquipmentInventory": {
+        "_extends": "Entity",
+        "equipmentType": "EquipmentType",
+        "totalCount": "number",
+        "availableCount": "number",
+        "condition": "number:0-100",
+        "hourlyRate": "number",
+        "halfDayRate": "number",
+        "fullDayRate": "number",
+        "depositRequired": "number",
+        "maintenanceInterval": "number:days"
+      },
+      
+      "EquipmentType": {
+        "_extends": "Entity",
+        "name": "string",
+        "category": "enum:surf|paddle|boat|diving|other",
+        "skillRequired": "number:1-5",
+        "licenseRequired": "boolean",
+        "insuranceRequired": "boolean",
+        "minAge": "number",
+        "purchaseCost": "number",
+        "lifespan": "number:months"
+      },
+      
+      "LessonOffering": {
+        "_extends": "Entity",
+        "sport": "string",
+        "level": "enum:beginner|intermediate|advanced",
+        "duration": "number:minutes",
+        "maxGroupSize": "number",
+        "price": "number",
+        "instructorCost": "number",
+        "equipmentIncluded": "boolean",
+        "requiredCertification": "?string"
+      },
+      
+      "GuidedTour": {
+        "_extends": "Entity",
+        "name": "string",
+        "description": "string",
+        "duration": "number:minutes",
+        "maxParticipants": "number",
+        "price": "number",
+        "departureTimes": ["string:HH:mm"],
+        "weatherDependent": "boolean",
+        "equipmentProvided": "boolean",
+        "difficultyLevel": "number:1-5"
+      },
+      
+      "WeatherDependency": {
+        "minTemperature": "?number",
+        "maxWindSpeed": "?number",
+        "waveHeightMin": "?number",
+        "waveHeightMax": "?number",
+        "waveHeightOptimal": "?number",
+        "restrictedConditions": ["string"]
+      },
+      
+      "SafetyRequirements": {
+        "requiresSwimmingAbility": "boolean",
+        "requiresLicense": "boolean",
+        "requiresInsurance": "boolean",
+        "minimumAge": "number",
+        "requiresWaiver": "boolean"
+      },
+      
+      "Hotel": {
+        "_extends": "Establishment",
+        "starRating": "number:1-5",
+        "rooms": ["HotelRoom"],
+        "baseNightlyRate": "number",
+        "seasonalRates": ["SeasonalRate"],
+        "checkInTime": "string:HH:mm",
+        "checkOutTime": "string:HH:mm",
+        "earlyCheckInFee": "number",
+        "lateCheckOutFee": "number",
+        "amenities": ["HotelAmenity"],
+        "mealPlans": ["MealPlan"],
+        "services": "HotelServices"
+      },
+      
+      "HotelRoom": {
+        "_extends": "Entity",
+        "roomType": "RoomType",
+        "floor": "number",
+        "view": "enum:ocean|garden|pool|city|none",
+        "maxOccupancy": "number",
+        "bedConfiguration": "string",
+        "squareMeters": "number",
+        "baseRate": "number",
+        "status": "enum:available|occupied|cleaning|maintenance|blocked",
+        "amenities": ["RoomAmenity"],
+        "currentGuest": "?Individual"
+      },
+      
+      "RoomType": {
+        "_extends": "Entity",
+        "name": "string",
+        "tier": "number:1-5",
+        "baseSquareMeters": "number",
+        "defaultAmenities": ["RoomAmenity"],
+        "priceMultiplier": "number"
+      },
+      
+      "RoomAmenity": {
+        "_extends": "Entity",
+        "name": "string",
+        "installCost": "number",
+        "maintenanceCost": "number",
+        "guestSatisfactionBonus": "number"
+      },
+      
+      "HotelAmenity": {
+        "_extends": "Entity",
+        "name": "string",
+        "installCost": "number",
+        "operatingCost": "number",
+        "staffRequired": "number",
+        "attractivenessBonus": "number"
+      },
+      
+      "MealPlan": {
+        "_extends": "Entity",
+        "type": "enum:room_only|breakfast|half_board|full_board|all_inclusive",
+        "pricePerNight": "number",
+        "includedMeals": ["string"],
+        "includedDrinks": "boolean"
+      },
+      
+      "HotelServices": {
+        "has24HourReception": "boolean",
+        "hasConcierge": "boolean",
+        "hasValet": "boolean",
+        "hasShuttle": "boolean",
+        "hasBellhop": "boolean",
+        "hasRoomService": "boolean",
+        "roomServiceHours": "?TimeRange"
+      },
+      
+      "SeasonalRate": {
+        "season": "string",
+        "startMonth": "number:1-12",
+        "endMonth": "number:1-12",
+        "priceMultiplier": "number"
+      },
+      
+      "Shop": {
+        "_extends": "Establishment",
+        "shopInventory": ["ShopInventory"],
+        "markupPercent": "number",
+        "restockFrequency": "number:days"
+      },
+      
+      "ShopInventory": {
+        "product": "Product",
+        "stockCount": "number",
+        "maxStock": "number",
+        "reorderPoint": "number"
+      },
+      
+      "Product": {
+        "_extends": "Entity",
+        "name": "string",
+        "description": "string",
+        "category": "string",
+        "wholesaleCost": "number",
+        "retailPrice": "number",
+        "perishable": "boolean",
+        "shelfLife": "?number:days",
+        "popularity": "number:0-100"
+      }
+    },
+    
+    "event": {
+      "_description": "Events, concerts, festivals, and entertainment system",
+      
+      "Event": {
+        "_extends": "Entity",
+        "_abstract": true,
+        "name": "string",
+        "description": "string",
+        "dateRange": "DateRange",
+        "schedule": "EventSchedule",
+        "venue": "Venue",
+        "organizer": "EventOrganizer",
+        "capacity": "number",
+        "ticketing": "?TicketingInfo",
+        "status": "enum:announced|tickets_on_sale|sold_out|ongoing|completed|cancelled",
+        "targetAudience": ["PeopleCategory"],
+        "marketing": "EventMarketing",
+        "impact": "EventImpact"
+      },
+      
+      "EventSchedule": {
+        "setupDate": "GameDate",
+        "openingDate": "GameDate",
+        "closingDate": "GameDate",
+        "teardownDate": "GameDate",
+        "dailySchedule": "?WeeklySchedule",
+        "keyMoments": ["ScheduledMoment"]
+      },
+      
+      "ScheduledMoment": {
+        "name": "string",
+        "dateTime": "timestamp",
+        "duration": "number:minutes",
+        "description": "string"
+      },
+      
+      "Venue": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "VenueType",
+        "location": "Position",
+        "capacity": "VenueCapacity",
+        "facilities": ["VenueFacility"],
+        "technicalSpecs": "TechnicalSpecs",
+        "rentalCost": "number:per_day",
+        "availabilityCalendar": ["VenueBooking"],
+        "reputation": "Reputation"
+      },
+      
+      "VenueType": {
+        "_extends": "Entity",
+        "name": "string",
+        "indoor": "boolean",
+        "weatherDependent": "boolean",
+        "acoustics": "number:1-5",
+        "suitableEvents": ["string"]
+      },
+      
+      "VenueCapacity": {
+        "standing": "number",
+        "seated": "number",
+        "vip": "number",
+        "backstage": "number"
+      },
+      
+      "VenueFacility": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "enum:stage|bar|vip_area|restroom|parking|green_room|technical_booth",
+        "capacity": "?number"
+      },
+      
+      "TechnicalSpecs": {
+        "stageSize": "Bounds",
+        "soundSystem": "string",
+        "lightingRig": "string",
+        "powerCapacity": "number:kw",
+        "hasProjection": "boolean",
+        "hasLedWalls": "boolean"
+      },
+      
+      "VenueBooking": {
+        "_extends": "Entity",
+        "venue": "Venue",
+        "event": "?Event",
+        "dateRange": "DateRange",
+        "status": "enum:hold|confirmed|cancelled",
+        "cost": "number"
+      },
+      
+      "EventOrganizer": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "enum:resort|external|artist_management|sponsor|municipal",
+        "contact": "Contact",
+        "pastEvents": ["Event"],
+        "reputation": "number:0-100"
+      },
+      
+      "Contact": {
+        "email": "string",
+        "phone": "string",
+        "website": "?string"
+      },
+      
+      "TicketingInfo": {
+        "tiers": ["TicketTier"],
+        "salesStartDate": "GameDate",
+        "salesEndDate": "GameDate",
+        "soldCount": "number",
+        "revenueGenerated": "number"
+      },
+      
+      "TicketTier": {
+        "_extends": "Entity",
+        "name": "string",
+        "price": "number",
+        "quantity": "number",
+        "soldCount": "number",
+        "perks": ["string"],
+        "transferable": "boolean",
+        "refundable": "boolean"
+      },
+      
+      "EventMarketing": {
+        "budget": "number",
+        "campaigns": ["MarketingCampaign"],
+        "pressReleases": ["PressRelease"],
+        "socialPosts": ["SocialPost"],
+        "influencerDeals": ["InfluencerDeal"]
+      },
+      
+      "EventImpact": {
+        "expectedAttendance": "number",
+        "actualAttendance": "?number",
+        "touristMultiplier": "number",
+        "revenueImpact": "number",
+        "reputationImpact": "number",
+        "mediaReach": "number",
+        "socialMentions": "number"
+      },
+      
+      "Concert": {
+        "_extends": "Event",
+        "performers": ["PerformerBooking"],
+        "genre": "MusicGenre",
+        "setlist": "?Setlist",
+        "openingActs": ["PerformerBooking"],
+        "afterParty": "?Event"
+      },
+      
+      "PerformerBooking": {
+        "performer": "Performer",
+        "fee": "number",
+        "requirements": "PerformerRequirements",
+        "setDuration": "number:minutes",
+        "slot": "TimeRange",
+        "confirmed": "boolean"
+      },
+      
+      "Performer": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "enum:solo_artist|band|dj|comedian|dancer|other",
+        "genre": ["MusicGenre"],
+        "popularity": "PerformerPopularity",
+        "bookingFee": "PriceRange",
+        "requirements": "PerformerRequirements",
+        "socialPresence": "SocialPresence",
+        "management": "?Contact",
+        "pastPerformances": ["Event"],
+        "upcomingReleases": ["MediaRelease"]
+      },
+      
+      "PerformerPopularity": {
+        "localFame": "number:0-100",
+        "nationalFame": "number:0-100",
+        "internationalFame": "number:0-100",
+        "currentTrend": "enum:rising|stable|declining|comeback",
+        "monthlyListeners": "number",
+        "chartPositions": ["ChartPosition"]
+      },
+      
+      "ChartPosition": {
+        "chart": "string",
+        "position": "number",
+        "date": "GameDate",
+        "track": "string"
+      },
+      
+      "PerformerRequirements": {
+        "technicalRider": "TechnicalRider",
+        "hospitalityRider": "HospitalityRider",
+        "securityLevel": "enum:minimal|standard|high|vip"
+      },
+      
+      "TechnicalRider": {
+        "stageSize": "Bounds",
+        "soundRequirements": ["string"],
+        "lightingRequirements": ["string"],
+        "backlineProvided": "boolean",
+        "specialEffects": ["string"]
+      },
+      
+      "HospitalityRider": {
+        "accommodationType": "string",
+        "transportRequired": "boolean",
+        "cateringRequirements": ["string"],
+        "greenRoomRequirements": ["string"],
+        "guestListSize": "number"
+      },
+      
+      "Setlist": {
+        "songs": ["SetlistItem"],
+        "totalDuration": "number:minutes",
+        "encoreIncluded": "boolean"
+      },
+      
+      "SetlistItem": {
+        "title": "string",
+        "duration": "number:minutes",
+        "isNew": "boolean",
+        "isHit": "boolean"
+      },
+      
+      "MediaRelease": {
+        "_extends": "Entity",
+        "type": "enum:single|album|ep|music_video|documentary",
+        "title": "string",
+        "releaseDate": "GameDate",
+        "anticipation": "number:0-100",
+        "marketingPush": "number:0-100"
+      },
+      
+      "Festival": {
+        "_extends": "Event",
+        "festivalType": "FestivalType",
+        "stages": ["FestivalStage"],
+        "lineup": ["PerformerBooking"],
+        "vendors": ["FestivalVendor"],
+        "campingAvailable": "boolean",
+        "dayPasses": "boolean"
+      },
+      
+      "FestivalType": {
+        "_extends": "Entity",
+        "name": "string",
+        "primaryGenre": "?MusicGenre",
+        "focus": "enum:music|food|art|cultural|sports|mixed",
+        "atmosphere": "string",
+        "typicalDuration": "number:days"
+      },
+      
+      "FestivalStage": {
+        "name": "string",
+        "capacity": "number",
+        "technicalSpecs": "TechnicalSpecs",
+        "schedule": ["PerformerBooking"]
+      },
+      
+      "FestivalVendor": {
+        "vendor": "MarketVendor|Establishment",
+        "location": "Position",
+        "boothSize": "Bounds",
+        "fee": "number",
+        "category": "enum:food|drink|merchandise|sponsor|service"
+      }
+    },
+    
+    "social": {
+      "_description": "Social media, news, trends, and influencer system",
+      
+      "SocialPlatform": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "enum:microblog|photo|video|review|news|forum",
+        "userBase": "number",
+        "primaryDemographic": "PriceRange",
+        "engagementMultiplier": "number",
+        "viralPotential": "number:0-100"
+      },
+      
+      "SocialPost": {
+        "_extends": "Entity",
+        "author": "SocialAccount",
+        "platform": "SocialPlatform",
+        "type": "enum:text|photo|video|story|review|check_in|live",
+        "content": "PostContent",
+        "mentions": ["SocialMention"],
+        "hashtags": ["Hashtag"],
+        "location": "?Position",
+        "taggedEstablishment": "?Establishment",
+        "engagement": "PostEngagement",
+        "reach": "PostReach",
+        "sentiment": "enum:very_negative|negative|neutral|positive|very_positive",
+        "isSponsored": "boolean",
+        "sponsorDeal": "?InfluencerDeal"
+      },
+      
+      "PostContent": {
+        "text": "?string",
+        "mediaUrls": ["string"],
+        "mediaType": "?enum:photo|video|carousel|gif",
+        "caption": "?string",
+        "altText": "?string"
+      },
+      
+      "SocialMention": {
+        "account": "SocialAccount",
+        "mentionType": "enum:tag|reply|quote|collaboration"
+      },
+      
+      "Hashtag": {
+        "_extends": "Entity",
+        "tag": "string",
+        "category": "enum:location|event|trend|brand|generic",
+        "usageCount": "number",
+        "trendingScore": "number:0-100",
+        "relatedHashtags": ["Hashtag"]
+      },
+      
+      "PostEngagement": {
+        "likes": "number",
+        "comments": "number",
+        "shares": "number",
+        "saves": "number",
+        "clicks": "number",
+        "engagementRate": "number:percentage"
+      },
+      
+      "PostReach": {
+        "impressions": "number",
+        "uniqueReach": "number",
+        "viralCoefficient": "number",
+        "peakHour": "number:0-23"
+      },
+      
+      "SocialAccount": {
+        "_extends": "Entity",
+        "owner": "Individual|Establishment|Performer|EventOrganizer",
+        "platform": "SocialPlatform",
+        "handle": "string",
+        "displayName": "string",
+        "bio": "string",
+        "followers": "number",
+        "following": "number",
+        "posts": ["SocialPost"],
+        "verified": "boolean",
+        "accountType": "enum:personal|business|creator|official",
+        "metrics": "AccountMetrics",
+        "influencerTier": "?InfluencerTier"
+      },
+      
+      "AccountMetrics": {
+        "avgEngagementRate": "number:percentage",
+        "avgReach": "number",
+        "postFrequency": "number:per_week",
+        "followerGrowthRate": "number:per_month",
+        "audienceQuality": "number:0-100"
+      },
+      
+      "InfluencerTier": {
+        "_extends": "Entity",
+        "name": "string",
+        "followerRange": "PriceRange",
+        "avgEngagement": "PriceRange",
+        "typicalFee": "PriceRange",
+        "reachMultiplier": "number"
+      },
+      
+      "InfluencerDeal": {
+        "_extends": "Entity",
+        "influencer": "SocialAccount",
+        "client": "Establishment|Event|EventOrganizer",
+        "dealType": "DealType",
+        "compensation": "Compensation",
+        "deliverables": ["Deliverable"],
+        "dateRange": "DateRange",
+        "status": "enum:negotiating|agreed|in_progress|completed|cancelled",
+        "performance": "?DealPerformance"
+      },
+      
+      "DealType": {
+        "_extends": "Entity",
+        "name": "string",
+        "description": "string",
+        "typicalDeliverables": ["string"],
+        "exclusivityRequired": "boolean"
+      },
+      
+      "Deliverable": {
+        "type": "enum:post|story|reel|video|review|appearance|mention",
+        "quantity": "number",
+        "platform": "SocialPlatform",
+        "dueDate": "GameDate",
+        "approvalRequired": "boolean",
+        "completed": "boolean",
+        "resultingPost": "?SocialPost"
+      },
+      
+      "DealPerformance": {
+        "totalReach": "number",
+        "totalEngagement": "number",
+        "estimatedValue": "number",
+        "conversionRate": "?number",
+        "roi": "number"
+      },
+      
+      "Trend": {
+        "_extends": "Entity",
+        "topic": "string",
+        "type": "enum:hashtag|topic|event|controversy|viral_content",
+        "platforms": ["SocialPlatform"],
+        "relatedEntities": ["Entity"],
+        "sentiment": "TrendSentiment",
+        "lifecycle": "TrendLifecycle",
+        "impact": "TrendImpact"
+      },
+      
+      "TrendSentiment": {
+        "overall": "number:-100-100",
+        "positiveRatio": "number:percentage",
+        "negativeRatio": "number:percentage",
+        "controversyLevel": "number:0-100"
+      },
+      
+      "TrendLifecycle": {
+        "startDate": "timestamp",
+        "peakDate": "?timestamp",
+        "endDate": "?timestamp",
+        "currentPhase": "enum:emerging|growing|peak|declining|dead",
+        "velocity": "number",
+        "mentions": "number"
+      },
+      
+      "TrendImpact": {
+        "touristInterest": "number:-100-100",
+        "establishmentTraffic": "number:-100-100",
+        "reputationEffect": "number:-100-100",
+        "revenueEffect": "number"
+      }
+    },
+    
+    "news": {
+      "_description": "Beach resort news and PR system managed by player",
+      
+      "NewsFeed": {
+        "_extends": "Entity",
+        "_description": "The main news page of the beach resort (player-managed)",
+        "name": "string",
+        "owner": "string:resort",
+        "followers": "number",
+        "credibility": "number:0-100",
+        "articles": ["NewsArticle"],
+        "announcements": ["Announcement"],
+        "schedule": "PublishingSchedule",
+        "editorial": "EditorialPolicy",
+        "analytics": "FeedAnalytics"
+      },
+      
+      "PublishingSchedule": {
+        "postsPerDay": "number",
+        "peakHours": ["number:0-23"],
+        "contentMix": "ContentMix"
+      },
+      
+      "ContentMix": {
+        "newsPercent": "number",
+        "eventsPercent": "number",
+        "promotionsPercent": "number",
+        "communityPercent": "number",
+        "entertainmentPercent": "number"
+      },
+      
+      "EditorialPolicy": {
+        "tone": "enum:formal|casual|fun|luxury|community",
+        "responseToNegative": "enum:ignore|address|apologize|defend",
+        "promotionFrequency": "enum:never|rare|moderate|frequent|aggressive",
+        "communityEngagement": "enum:none|minimal|active|highly_engaged"
+      },
+      
+      "FeedAnalytics": {
+        "totalReach": "number",
+        "avgEngagement": "number",
+        "followerGrowth": "number:per_week",
+        "topPerformingContent": ["NewsArticle|Announcement"],
+        "audienceInsights": "AudienceInsights"
+      },
+      
+      "AudienceInsights": {
+        "demographics": "CategoryDemographics",
+        "peakActivityHours": ["number:0-23"],
+        "topInterests": ["Interest"],
+        "locationBreakdown": "object"
+      },
+      
+      "NewsArticle": {
+        "_extends": "Entity",
+        "headline": "string",
+        "subheadline": "?string",
+        "body": "string",
+        "author": "?StaffMember",
+        "category": "NewsCategory",
+        "featuredImage": "?string",
+        "relatedEntities": ["Entity"],
+        "publishDate": "timestamp",
+        "status": "enum:draft|scheduled|published|archived",
+        "engagement": "PostEngagement",
+        "seoKeywords": ["string"],
+        "isPinned": "boolean"
+      },
+      
+      "NewsCategory": {
+        "_extends": "Entity",
+        "name": "string",
+        "icon": "string",
+        "color": "string",
+        "priority": "number"
+      },
+      
+      "Announcement": {
+        "_extends": "Entity",
+        "title": "string",
+        "message": "string",
+        "type": "AnnouncementType",
+        "urgency": "enum:low|medium|high|critical",
+        "targetAudience": ["PeopleCategory"],
+        "displayLocations": ["enum:feed|banner|push|email|sms"],
+        "dateRange": "DateRange",
+        "callToAction": "?CallToAction",
+        "engagement": "PostEngagement"
+      },
+      
+      "AnnouncementType": {
+        "_extends": "Entity",
+        "name": "string",
+        "template": "string",
+        "icon": "string",
+        "color": "string"
+      },
+      
+      "CallToAction": {
+        "text": "string",
+        "url": "?string",
+        "action": "enum:book|visit|buy|learn_more|rsvp|contact",
+        "targetEntity": "?Entity",
+        "clicks": "number",
+        "conversions": "number"
+      },
+      
+      "PressRelease": {
+        "_extends": "Entity",
+        "title": "string",
+        "body": "string",
+        "subject": "Entity",
+        "releaseDate": "timestamp",
+        "embargo": "?timestamp",
+        "mediaKit": "?MediaKit",
+        "distribution": ["MediaOutlet"],
+        "coverage": ["MediaCoverage"]
+      },
+      
+      "MediaKit": {
+        "photos": ["string"],
+        "videos": ["string"],
+        "logos": ["string"],
+        "factSheet": "string",
+        "contactInfo": "Contact"
+      },
+      
+      "MediaOutlet": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "enum:newspaper|magazine|tv|radio|blog|podcast|social",
+        "reach": "number",
+        "relevance": "number:0-100",
+        "sentiment": "enum:friendly|neutral|critical",
+        "contacts": ["Contact"]
+      },
+      
+      "MediaCoverage": {
+        "_extends": "Entity",
+        "outlet": "MediaOutlet",
+        "headline": "string",
+        "sentiment": "enum:very_negative|negative|neutral|positive|very_positive",
+        "reach": "number",
+        "publishDate": "timestamp",
+        "url": "?string"
+      },
+      
+      "MarketingCampaign": {
+        "_extends": "Entity",
+        "name": "string",
+        "objective": "CampaignObjective",
+        "budget": "number",
+        "spent": "number",
+        "dateRange": "DateRange",
+        "channels": ["MarketingChannel"],
+        "targetAudience": ["PeopleCategory"],
+        "creatives": ["Creative"],
+        "performance": "CampaignPerformance",
+        "status": "enum:planning|active|paused|completed"
+      },
+      
+      "CampaignObjective": {
+        "_extends": "Entity",
+        "type": "enum:awareness|traffic|engagement|conversions|loyalty",
+        "targetMetric": "string",
+        "targetValue": "number",
+        "currentValue": "number"
+      },
+      
+      "MarketingChannel": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "enum:social|search|display|email|sms|print|outdoor|radio|tv",
+        "costModel": "enum:cpm|cpc|cpa|flat_rate",
+        "baseCost": "number",
+        "reach": "number",
+        "effectiveness": "number:0-100"
+      },
+      
+      "Creative": {
+        "_extends": "Entity",
+        "name": "string",
+        "type": "enum:image|video|text|audio|interactive",
+        "content": "PostContent",
+        "variants": ["CreativeVariant"],
+        "approvalStatus": "enum:pending|approved|rejected"
+      },
+      
+      "CreativeVariant": {
+        "name": "string",
+        "content": "PostContent",
+        "performance": "?CreativePerformance"
+      },
+      
+      "CreativePerformance": {
+        "impressions": "number",
+        "clicks": "number",
+        "conversions": "number",
+        "ctr": "number:percentage",
+        "conversionRate": "number:percentage"
+      },
+      
+      "CampaignPerformance": {
+        "impressions": "number",
+        "reach": "number",
+        "clicks": "number",
+        "conversions": "number",
+        "costPerResult": "number",
+        "roi": "number",
+        "brandLift": "?number"
+      }
+    },
+    
+    "people": {
+      "Individual": {
+        "_extends": "Entity",
+        "firstName": "string",
+        "lastName": "string",
+        "age": "number",
+        "gender": "enum:male|female|other",
+        "nationality": "string",
+        "languages": ["string"],
+        "wealth": "WealthProfile",
+        "personality": "PersonalityProfile",
+        "preferences": "Preferences",
+        "needs": "NeedsState",
+        "socialAccounts": ["SocialAccount"],
+        "location": "?Location"
+      },
+      
+      "WealthProfile": {
+        "class": "enum:budget|economy|moderate|comfortable|affluent|wealthy|ultra_wealthy",
+        "monthlyIncome": "number",
+        "dailyBudget": "number",
+        "priceFlexibility": "number:0-100",
+        "tippingBehavior": "enum:never|poor|standard|generous"
+      },
+      
+      "PersonalityProfile": {
+        "openness": "number:0-100",
+        "conscientiousness": "number:0-100",
+        "extraversion": "number:0-100",
+        "agreeableness": "number:0-100",
+        "neuroticism": "number:0-100",
+        "impulsiveness": "number:0-100",
+        "patience": "number:0-100",
+        "adventurousness": "number:0-100"
+      },
+      
+      "Preferences": {
+        "cuisines": ["CuisineType"],
+        "dietary": ["DietaryTag"],
+        "alcoholPreference": "enum:none|light|moderate|heavy",
+        "activityLevel": "enum:sedentary|light|moderate|active|athletic",
+        "waterComfort": "enum:none|shallow|swimmer|advanced",
+        "crowdPreference": "enum:quiet|moderate|lively|party",
+        "musicPreferences": ["MusicGenre"],
+        "nightlifeInterest": "number:0-100",
+        "interests": ["Interest"],
+        "followedAccounts": ["SocialAccount"],
+        "newsConsumption": "enum:none|headlines|moderate|heavy"
+      },
+      
+      "Interest": {
+        "_extends": "Entity",
+        "name": "string",
+        "category": "enum:water|beach|sports|entertainment|culture|relaxation|food|shopping|social",
+        "energyRequired": "number:1-5",
+        "socialLevel": "number:1-5",
+        "typicalDuration": "number:minutes",
+        "relatedEstablishments": ["string:establishment_type"]
+      },
+      
+      "NeedsState": {
+        "mood": "number:-100-100",
+        "energy": "number:0-100",
+        "hunger": "number:0-100",
+        "thirst": "number:0-100",
+        "bladder": "number:0-100",
+        "socialNeed": "number:0-100",
+        "entertainment": "number:0-100",
+        "fomo": "number:0-100"
+      },
+      
+      "Location": {
+        "position": "Position",
+        "establishment": "?Establishment",
+        "zone": "?string"
+      },
+      
+      "Group": {
+        "_extends": "Entity",
+        "members": ["Individual"],
+        "type": "GroupType",
+        "leader": "?Individual",
+        "dynamics": "GroupDynamics",
+        "budget": "GroupBudget",
+        "schedule": "GroupSchedule",
+        "state": "GroupState",
+        "satisfaction": "number:0-100"
+      },
+      
+      "GroupType": {
+        "_extends": "Entity",
+        "name": "string",
+        "sizeRange": "PriceRange",
+        "typicalAgeRange": "PriceRange",
+        "hasChildren": "boolean",
+        "hasElderly": "boolean",
+        "defaultDynamics": "GroupDynamics"
+      },
+      
+      "GroupDynamics": {
+        "cohesion": "number:0-100",
+        "conflictLevel": "number:0-100",
+        "canSplit": "boolean",
+        "requiresConsensus": "boolean",
+        "leadershipStyle": "enum:democratic|single_leader|rotating|chaotic"
+      },
+      
+      "GroupBudget": {
+        "combined": "number",
+        "spent": "number",
+        "spendingStyle": "enum:frugal|balanced|generous|lavish"
+      },
+      
+      "GroupSchedule": {
+        "arrivalTime": "timestamp",
+        "departureTime": "timestamp",
+        "plannedActivities": ["ScheduledActivity"],
+        "completedActivities": ["ScheduledActivity"]
+      },
+      
+      "ScheduledActivity": {
+        "timeSlot": "TimeRange",
+        "activityType": "ActivityType",
+        "establishment": "?Establishment",
+        "event": "?Event",
+        "priority": "enum:flexible|preferred|essential",
+        "budgetAllocation": "number:percentage",
+        "completed": "boolean",
+        "satisfaction": "?number:0-100"
+      },
+      
+      "ActivityType": {
+        "_extends": "Entity",
+        "name": "string",
+        "category": "enum:arrive|meal|activity|rest|entertainment|shopping|event|depart",
+        "typicalDuration": "number:minutes",
+        "energyCost": "number",
+        "needsSatisfied": ["string"],
+        "relatedEstablishments": ["string:establishment_type"]
+      },
+      
+      "GroupState": {
+        "current": "enum:arriving|exploring|deciding|traveling|queuing|visiting|resting|at_event|departing|departed",
+        "currentLocation": "?Location",
+        "targetLocation": "?Location",
+        "mood": "number:-100-100",
+        "energy": "number:0-100"
+      },
+      
+      "PeopleCategory": {
+        "_extends": "Entity",
+        "name": "string",
+        "description": "string",
+        "demographics": "CategoryDemographics",
+        "behavior": "CategoryBehavior",
+        "routine": "RoutineTemplate",
+        "mediaConsumption": "MediaConsumption"
+      },
+      
+      "CategoryDemographics": {
+        "ageRange": "PriceRange",
+        "groupSizeRange": "PriceRange",
+        "typicalGroupTypes": ["GroupType"],
+        "wealthClasses": ["string"],
+        "dailyBudgetRange": "PriceRange"
+      },
+      
+      "CategoryBehavior": {
+        "primaryInterests": ["Interest"],
+        "secondaryInterests": ["Interest"],
+        "preferredEstablishments": ["string:establishment_type"],
+        "avoidedEstablishments": ["string:establishment_type"],
+        "peakSeasons": ["string"],
+        "avoidedSeasons": ["string"],
+        "reviewLikelihood": "number:0-100",
+        "socialMediaActivity": "number:0-100",
+        "loyaltyTendency": "number:0-100",
+        "complainingTendency": "number:0-100",
+        "eventInterest": "number:0-100"
+      },
+      
+      "MediaConsumption": {
+        "preferredPlatforms": ["SocialPlatform"],
+        "newsConsumption": "enum:none|headlines|moderate|avid",
+        "influencerSusceptibility": "number:0-100",
+        "trendFollowing": "number:0-100",
+        "contentCreation": "number:0-100"
+      },
+      
+      "RoutineTemplate": {
+        "arrivalTimeRange": "TimeRange",
+        "departureTimeRange": "TimeRange",
+        "averageStayDuration": "number:hours",
+        "activities": ["RoutineActivity"]
+      },
+      
+      "RoutineActivity": {
+        "timeSlot": "TimeRange",
+        "activityType": "ActivityType",
+        "probability": "number:0-100",
+        "preferredCategories": ["string:establishment_type"],
+        "budgetAllocation": "number:percentage"
+      }
+    },
+    
+    "staff": {
+      "StaffMember": {
+        "_extends": "Entity",
+        "firstName": "string",
+        "lastName": "string",
+        "age": "number",
+        "nationality": "string",
+        "languages": ["string"],
+        "role": "StaffRole",
+        "employer": "Establishment",
+        "employment": "EmploymentDetails",
+        "schedule": "WeeklySchedule",
+        "compensation": "Compensation",
+        "skills": ["StaffSkill"],
+        "certifications": ["string"],
+        "performance": "PerformanceMetrics",
+        "state": "StaffState",
+        "socialAccounts": ["SocialAccount"]
+      },
+      
+      "StaffRole": {
+        "_extends": "Entity",
+        "name": "string",
+        "category": "enum:management|kitchen|service|bar|hotel|beach|entertainment|activities|retail|support|marketing|pr",
+        "baseSalary": "number",
+        "requiredSkills": ["SkillRequirement"],
+        "requiredCertifications": ["string"],
+        "supervisesRoles": ["StaffRole"]
+      },
+      
+      "SkillRequirement": {
+        "skill": "Skill",
+        "minimumLevel": "number:1-5"
+      },
+      
+      "Skill": {
+        "_extends": "Entity",
+        "name": "string",
+        "category": "string",
+        "maxLevel": "number",
+        "trainingCost": "number",
+        "trainingDuration": "number:hours"
+      },
+      
+      "StaffSkill": {
+        "skill": "Skill",
+        "level": "number:1-5",
+        "experience": "number:hours"
+      },
+      
+      "EmploymentDetails": {
+        "type": "enum:full_time|part_time|seasonal|temp|contractor",
+        "hireDate": "timestamp",
+        "contractEndDate": "?timestamp",
+        "hoursPerWeek": "number",
+        "overtimeAllowed": "boolean"
+      },
+      
+      "Compensation": {
+        "baseSalary": "number",
+        "hourlyRate": "?number",
+        "tips": "number",
+        "bonuses": ["Bonus"],
+        "totalCompensation": "number"
+      },
+      
+      "Bonus": {
+        "type": "enum:performance|holiday|signing|referral",
+        "amount": "number",
+        "date": "timestamp",
+        "reason": "string"
+      },
+      
+      "PerformanceMetrics": {
+        "rating": "number:0-100",
+        "customerRating": "number:0-5",
+        "efficiency": "number:0-100",
+        "reliability": "number:0-100",
+        "tasksCompleted": "number",
+        "customersServed": "number",
+        "incidents": "number"
+      },
+      
+      "StaffState": {
+        "current": "enum:off_duty|commuting|clocked_in|on_break|working|training|sick_leave|vacation",
+        "morale": "number:0-100",
+        "fatigue": "number:0-100",
+        "currentShift": "?ShiftInfo"
+      },
+      
+      "ShiftInfo": {
+        "startTime": "timestamp",
+        "endTime": "timestamp",
+        "breaksTaken": "number",
+        "tasksCompleted": "number"
+      }
+    },
+    
+    "review": {
+      "Review": {
+        "_extends": "Entity",
+        "author": "Individual",
+        "establishment": "Establishment",
+        "visit": "Visit",
+        "ratings": "ReviewRatings",
+        "content": "ReviewContent",
+        "engagement": "ReviewEngagement",
+        "impact": "ReviewImpact",
+        "response": "?OwnerResponse",
+        "linkedSocialPost": "?SocialPost"
+      },
+      
+      "Visit": {
+        "_extends": "Entity",
+        "visitor": "Individual|Group",
+        "establishment": "Establishment",
+        "event": "?Event",
+        "arrivalTime": "timestamp",
+        "departureTime": "timestamp",
+        "spending": "number",
+        "satisfaction": "number:0-100",
+        "itemsConsumed": ["MenuItem|DrinkItem|Product"],
+        "staffInteractions": ["StaffMember"],
+        "socialPosts": ["SocialPost"]
+      },
+      
+      "ReviewRatings": {
+        "overall": "number:1-5",
+        "food": "?number:1-5",
+        "drinks": "?number:1-5",
+        "service": "?number:1-5",
+        "atmosphere": "?number:1-5",
+        "value": "?number:1-5",
+        "cleanliness": "?number:1-5",
+        "facilities": "?number:1-5"
+      },
+      
+      "ReviewContent": {
+        "title": "?string",
+        "body": "string",
+        "language": "string",
+        "sentiment": "enum:very_negative|negative|neutral|positive|very_positive",
+        "keywords": ["string"],
+        "topics": ["ReviewTopic"],
+        "photos": ["ReviewPhoto"]
+      },
+      
+      "ReviewTopic": {
+        "_extends": "Entity",
+        "name": "string",
+        "category": "enum:food|service|atmosphere|value|cleanliness|location|experience",
+        "sentimentWeight": "number"
+      },
+      
+      "ReviewPhoto": {
+        "_extends": "Entity",
+        "url": "string",
+        "caption": "?string",
+        "category": "enum:food|drink|interior|exterior|view|other",
+        "likes": "number"
+      },
+      
+      "ReviewEngagement": {
+        "platform": "enum:in_game|google|tripadvisor|instagram|facebook",
+        "isVerified": "boolean",
+        "helpfulVotes": "number",
+        "unhelpfulVotes": "number",
+        "reportCount": "number",
+        "reach": "number",
+        "sharedToSocial": "boolean"
+      },
+      
+      "ReviewImpact": {
+        "viralScore": "number:0-100",
+        "ratingImpact": "number",
+        "revenueImpact": "number",
+        "wasInfluential": "boolean",
+        "triggeredTrend": "?Trend"
+      },
+      
+      "OwnerResponse": {
+        "responder": "StaffMember",
+        "responseDate": "timestamp",
+        "content": "string",
+        "sentiment": "enum:apologetic|thankful|defensive|professional",
+        "publicReaction": "?PostEngagement"
+      },
+      
+      "ReviewerProfile": {
+        "individual": "Individual",
+        "reviewCount": "number",
+        "averageRating": "number",
+        "helpfulVotes": "number",
+        "level": "enum:newcomer|contributor|regular|expert|master|influencer",
+        "badges": ["ReviewerBadge"],
+        "credibilityScore": "number:0-100"
+      },
+      
+      "ReviewerBadge": {
+        "_extends": "Entity",
+        "name": "string",
+        "description": "string",
+        "icon": "string",
+        "requirement": "string"
+      }
+    },
+    
+    "economy": {
+      "Transaction": {
+        "_extends": "Entity",
+        "customer": "Individual|Group",
+        "establishment": "Establishment",
+        "staff": "?StaffMember",
+        "items": ["TransactionItem"],
+        "amounts": "TransactionAmounts",
+        "paymentMethod": "enum:cash|card|mobile|crypto",
+        "status": "enum:pending|completed|refunded|disputed",
+        "timestamp": "timestamp"
+      },
+      
+      "TransactionItem": {
+        "item": "MenuItem|DrinkItem|Product|RentalInventory|LessonOffering|TicketTier",
+        "quantity": "number",
+        "unitPrice": "number",
+        "totalPrice": "number"
+      },
+      
+      "TransactionAmounts": {
+        "subtotal": "number",
+        "tax": "number",
+        "tip": "number",
+        "discount": "number",
+        "total": "number"
+      },
+      
+      "PricingStrategy": {
+        "_extends": "Entity",
+        "basePrice": "number",
+        "demandMultipliers": "DemandPricing",
+        "seasonalMultipliers": ["SeasonalRate"],
+        "timeOfDayMultipliers": ["TimeOfDayPricing"],
+        "eventMultipliers": ["EventPricing"]
+      },
+      
+      "DemandPricing": {
+        "lowOccupancy": "number",
+        "mediumOccupancy": "number",
+        "highOccupancy": "number",
+        "peakOccupancy": "number"
+      },
+      
+      "TimeOfDayPricing": {
+        "timeRange": "TimeRange",
+        "multiplier": "number"
+      },
+      
+      "EventPricing": {
+        "eventType": "string",
+        "multiplier": "number"
+      }
+    },
+    
+    "time": {
+      "GameDate": {
+        "year": "number",
+        "month": "number:1-12",
+        "day": "number:1-31",
+        "hour": "number:0-23",
+        "minute": "number:0-59",
+        "dayOfWeek": "number:0-6",
+        "season": "Season"
+      },
+      
+      "Season": {
+        "_extends": "Entity",
+        "name": "string",
+        "months": ["number:1-12"],
+        "touristMultiplier": "number",
+        "weatherProfile": "SeasonWeather",
+        "typicalEvents": ["string"]
+      },
+      
+      "SeasonWeather": {
+        "temperatureRange": "PriceRange",
+        "rainProbability": "number:0-100",
+        "stormProbability": "number:0-100",
+        "sunnyDaysProbability": "number:0-100"
+      },
+      
+      "Weather": {
+        "condition": "WeatherCondition",
+        "temperature": "number",
+        "humidity": "number:0-100",
+        "windSpeed": "number",
+        "uvIndex": "number:0-11",
+        "waveHeight": "number",
+        "visibility": "number"
+      },
+      
+      "WeatherCondition": {
+        "_extends": "Entity",
+        "name": "string",
+        "icon": "string",
+        "touristModifier": "number",
+        "outdoorActivityModifier": "number",
+        "waterActivityModifier": "number",
+        "eventImpact": "number"
+      },
+      
+      "Holiday": {
+        "_extends": "Entity",
+        "name": "string",
+        "month": "number:1-12",
+        "day": "number:1-31",
+        "isPublic": "boolean",
+        "touristImpact": "number",
+        "closedEstablishments": ["string:establishment_type"],
+        "typicalEvents": ["string"]
+      }
+    },
+    
+    "config": {
+      "EconomyConfig": {
+        "startingCapital": "number",
+        "loanInterestRate": "number",
+        "maxLoanMultiplier": "number",
+        "taxRate": "number",
+        "inflationRate": "number"
+      },
+      
+      "AttendanceConfig": {
+        "baseCapacity": "number",
+        "weatherModifiers": "object",
+        "dayOfWeekModifiers": "object",
+        "seasonModifiers": "object",
+        "eventModifiers": "object"
+      },
+      
+      "ReviewConfig": {
+        "baseReviewChance": "number",
+        "satisfactionModifier": "number",
+        "influencerBoost": "number",
+        "badExperienceBoost": "number",
+        "viralThreshold": "number",
+        "ratingDecayDays": "number"
+      },
+      
+      "SocialConfig": {
+        "trendLifespanDays": "number",
+        "viralThreshold": "number",
+        "influencerImpactMultiplier": "number",
+        "negativePRDamage": "number",
+        "positivePRBoost": "number"
+      },
+      
+      "EventConfig": {
+        "maxConcurrentEvents": "number",
+        "bookingLeadTimeDays": "number",
+        "cancellationPenalty": "number",
+        "weatherCancellationThreshold": "string"
+      },
+      
+      "SupplyConfig": {
+        "defaultLeadTimeDays": "number",
+        "spoilageRate": "number",
+        "priceFluctuationRange": "PriceRange",
+        "localSupplierBonus": "number"
+      },
+      
+      "StaffConfig": {
+        "baseMorale": "number",
+        "moraleDecayPerHour": "number",
+        "overworkThreshold": "number",
+        "trainingEffectiveness": "number",
+        "turnoverBaseChance": "number"
+      },
+      
+      "SimulationConfig": {
+        "ticksPerGameMinute": "number",
+        "realSecondsPerGameHour": "number",
+        "maxEntitiesPerTick": "number",
+        "needDecayRates": "NeedDecayRates"
+      },
+      
+      "NeedDecayRates": {
+        "hunger": "number:per_hour",
+        "thirst": "number:per_hour",
+        "energy": "number:per_hour",
+        "bladder": "number:per_hour",
+        "entertainment": "number:per_hour",
+        "fomo": "number:per_hour"
+      }
+    }
+  }
+}
