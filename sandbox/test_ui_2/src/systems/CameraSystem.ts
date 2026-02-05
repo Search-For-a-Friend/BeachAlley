@@ -38,12 +38,15 @@ export class CameraSystem {
   private clampToMapBounds(): void {
     const bounds = this.getMapBounds();
     
-    // Clamp camera position to ensure we don't scroll beyond map
-    // We want to keep at least the canvas viewport showing valid map area
-    const minCameraX = bounds.minWorldX;
-    const maxCameraX = bounds.maxWorldX - this.canvasWidth / this.camera.zoom;
-    const minCameraY = bounds.minWorldY;
-    const maxCameraY = bounds.maxWorldY - this.canvasHeight / this.camera.zoom;
+    // Add margins so edge tiles can be centered in viewport
+    const halfViewportWidth = (this.canvasWidth / this.camera.zoom) / 2;
+    const halfViewportHeight = (this.canvasHeight / this.camera.zoom) / 2;
+    
+    // Clamp camera position with margins
+    const minCameraX = bounds.minWorldX - halfViewportWidth;
+    const maxCameraX = bounds.maxWorldX - halfViewportWidth;
+    const minCameraY = bounds.minWorldY - halfViewportHeight;
+    const maxCameraY = bounds.maxWorldY - halfViewportHeight;
 
     this.camera.worldX = Math.max(minCameraX, Math.min(maxCameraX, this.camera.worldX));
     this.camera.worldY = Math.max(minCameraY, Math.min(maxCameraY, this.camera.worldY));

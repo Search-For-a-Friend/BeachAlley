@@ -20,9 +20,16 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: width || 800, height: height || 600 });
   const [cameraSystem] = useState<CameraSystem>(() => {
+    // Start at bottom-left corner of the map (tile ROWS-1, 0)
+    // Calculate world position for tile (ROWS-1, 0)
+    const bottomLeftRow = MAP_CONFIG.ROWS - 1;
+    const bottomLeftCol = 0;
+    const worldX = (bottomLeftCol - bottomLeftRow) * (CANVAS_CONFIG.TILE_WIDTH / 2);
+    const worldY = (bottomLeftCol + bottomLeftRow) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
+    
     const initialCamera: CameraState = {
-      worldX: 0,
-      worldY: 0,
+      worldX: worldX - 100,  // Small offset for better framing
+      worldY: worldY - 200,
       zoom: CANVAS_CONFIG.INITIAL_ZOOM,
     };
     return new CameraSystem(initialCamera, canvasSize.width, canvasSize.height);

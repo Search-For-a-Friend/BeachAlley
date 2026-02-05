@@ -19,8 +19,8 @@ export const CANVAS_CONFIG = {
 
 export const MAP_CONFIG = {
   // Test map size (large enough to require scrolling)
-  ROWS: 40,
-  COLS: 40,
+  ROWS: 80,
+  COLS: 80,
   
   // Terrain types for test purposes
   TERRAIN_TYPES: ['sand', 'water', 'grass', 'path'] as const,
@@ -29,5 +29,5 @@ export const MAP_CONFIG = {
 export const DEBUG_CONFIG = {
   LOG_TILE_LOADING: true,
   SHOW_TILE_COORDINATES: false,
-  SHOW_CAMERA_POSITION: true,
+  SHOW_CAMERA_POSITION: false,
 } as const;
