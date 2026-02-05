@@ -1,3 +1,6 @@
+// WIP: Isometric math utilities - currently not in use, work in progress
+// TODO: Complete and test isometric coordinate transformations
+
 /**
  * Isometric Math Utilities
  * 

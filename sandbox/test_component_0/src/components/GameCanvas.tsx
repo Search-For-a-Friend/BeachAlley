@@ -13,6 +13,41 @@ import {
   FacingDirection,
 } from '../assets';
 
+// Isometric conversion constants
+const TILE_WIDTH = 64;  // Width of diamond tile
+const TILE_HEIGHT = 32; // Height of diamond tile
+const GRID_COLS = 20;
+const GRID_ROWS = 20;
+
+// Convert grid coordinates to isometric screen position
+function gridToIso(gridX: number, gridY: number, canvasWidth: number, canvasHeight: number): { x: number; y: number } {
+  const isoX = (gridX - gridY) * (TILE_WIDTH / 2);
+  const isoY = (gridX + gridY) * (TILE_HEIGHT / 2);
+  
+  // Center the grid on canvas
+  const offsetX = canvasWidth / 2;
+  const offsetY = canvasHeight / 2 - (GRID_ROWS * TILE_HEIGHT / 2);
+  
+  return {
+    x: isoX + offsetX,
+    y: isoY + offsetY
+  };
+}
+
+// Convert screen position to grid coordinates (for gameplay logic)
+function isoToGrid(screenX: number, screenY: number, canvasWidth: number, canvasHeight: number): { gridX: number; gridY: number } {
+  const offsetX = canvasWidth / 2;
+  const offsetY = canvasHeight / 2 - (GRID_ROWS * TILE_HEIGHT / 2);
+  
+  const relX = screenX - offsetX;
+  const relY = screenY - offsetY;
+  
+  const gridX = (relX / (TILE_WIDTH / 2) + relY / (TILE_HEIGHT / 2)) / 2;
+  const gridY = (relY / (TILE_HEIGHT / 2) - relX / (TILE_WIDTH / 2)) / 2;
+  
+  return { gridX, gridY };
+}
+
 interface GameCanvasProps {
   state: GameState;
   width: number;
@@ -55,19 +90,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ state, width, height }) 
     // Draw grid
     drawGrid(ctx, width, height);
 
-    // Draw attraction radius
-    for (const establishment of state.establishments) {
-      drawAttractionRadius(ctx, establishment);
-    }
-
     // Draw establishments
     for (const establishment of state.establishments) {
-      drawEstablishment(ctx, establishment, spritesLoaded, animationTimeRef.current);
+      drawEstablishment(ctx, establishment, spritesLoaded, animationTimeRef.current, width, height);
     }
 
     // Draw people groups
     for (const group of state.groups) {
-      drawPeopleGroup(ctx, group, spritesLoaded, animationTimeRef.current);
+      drawPeopleGroup(ctx, group, spritesLoaded, animationTimeRef.current, width, height);
     }
 
     // Clean up animations for removed entities
@@ -152,23 +182,23 @@ function getPeopleAnimation(group: PeopleGroup): SpriteAnimation {
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
   ctx.lineWidth = 1;
 
-  const gridSize = 50;
-
-  for (let x = 0; x <= width; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-  }
-
-  for (let y = 0; y <= height; y += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
+  // Draw diamond grid
+  for (let row = 0; row < GRID_ROWS; row++) {
+    for (let col = 0; col < GRID_COLS; col++) {
+      const pos = gridToIso(col, row, width, height);
+      
+      // Draw diamond shape
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y - TILE_HEIGHT / 2); // Top
+      ctx.lineTo(pos.x + TILE_WIDTH / 2, pos.y); // Right
+      ctx.lineTo(pos.x, pos.y + TILE_HEIGHT / 2); // Bottom
+      ctx.lineTo(pos.x - TILE_WIDTH / 2, pos.y); // Left
+      ctx.closePath();
+      ctx.stroke();
+    }
   }
 }
 
@@ -220,31 +250,58 @@ function drawEstablishment(
   ctx: CanvasRenderingContext2D,
   establishment: Establishment,
   spritesLoaded: boolean,
-  currentTime: number
+  currentTime: number,
+  canvasWidth: number,
+  canvasHeight: number
 ): void {
-  const { x, y } = establishment.position;
+  // Use stored grid position if available, otherwise convert from screen
+  let gridX: number, gridY: number;
+  
+  if (establishment.gridPosition) {
+    gridX = establishment.gridPosition.x;
+    gridY = establishment.gridPosition.y;
+  } else {
+    const gridPos = isoToGrid(establishment.position.x, establishment.position.y, canvasWidth, canvasHeight);
+    gridX = Math.round(gridPos.gridX);
+    gridY = Math.round(gridPos.gridY);
+  }
+  
+  const screenPos = gridToIso(gridX, gridY, canvasWidth, canvasHeight);
 
-  // Try to draw sprite first
-  if (spritesLoaded) {
-    const animation = getEstablishmentAnimation(establishment);
-    // Update animation timing - use manifest speed (default 500ms for establishments)
-    const sprite = spriteLoader.getSprite(animation.spriteId);
-    const animSpeed = sprite?.manifest?.animationSpeed ?? 500;
-    if (currentTime - animation.lastFrameTime > animSpeed) {
-      animation.currentFrame = (animation.currentFrame + 1) % 2;
-      animation.lastFrameTime = currentTime;
-    }
-    
-    const drawn = drawSprite(ctx, animation, x, y, 1);
-    if (drawn) {
-      // Still draw the occupancy bar below the sprite
-      drawOccupancyBar(ctx, establishment);
-      return;
+  // Draw based on establishment size (in tiles)
+  const size = establishment.maxCapacity <= 4 ? 1 : establishment.maxCapacity <= 8 ? 2 : 3;
+  const color = getStateColor(establishment.state);
+  
+  // Draw multiple tiles for larger establishments
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
+      const tileGridX = gridX + dx - Math.floor(size / 2);
+      const tileGridY = gridY + dy - Math.floor(size / 2);
+      const tilePos = gridToIso(tileGridX, tileGridY, canvasWidth, canvasHeight);
+      
+      // Draw filled diamond
+      ctx.fillStyle = establishment.isOpen ? color : '#333';
+      ctx.globalAlpha = establishment.isOpen ? 0.8 : 0.5;
+      ctx.beginPath();
+      ctx.moveTo(tilePos.x, tilePos.y - TILE_HEIGHT / 2);
+      ctx.lineTo(tilePos.x + TILE_WIDTH / 2, tilePos.y);
+      ctx.lineTo(tilePos.x, tilePos.y + TILE_HEIGHT / 2);
+      ctx.lineTo(tilePos.x - TILE_WIDTH / 2, tilePos.y);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Draw border
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = establishment.isOpen ? '#fff' : '#666';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
   }
+  
+  ctx.globalAlpha = 1;
 
-  // Fallback: Draw with canvas primitives
-  drawEstablishmentFallback(ctx, establishment);
+  // Draw occupancy bar above establishment
+  drawOccupancyBar(ctx, establishment, screenPos.x, screenPos.y - (size * TILE_HEIGHT / 2) - 10);
 }
 
 function drawEstablishmentFallback(ctx: CanvasRenderingContext2D, establishment: Establishment): void {
@@ -284,27 +341,24 @@ function drawEstablishmentFallback(ctx: CanvasRenderingContext2D, establishment:
   drawOccupancyBar(ctx, establishment);
 }
 
-function drawOccupancyBar(ctx: CanvasRenderingContext2D, establishment: Establishment): void {
-  const { x, y } = establishment.position;
-  const size = 60;
+function drawOccupancyBar(ctx: CanvasRenderingContext2D, establishment: Establishment, x: number, y: number): void {
   const barWidth = 50;
   const barHeight = 6;
-  const barY = y + size / 2 + 10;
   const color = getStateColor(establishment.state);
 
   // Background
   ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.fillRect(x - barWidth / 2, barY, barWidth, barHeight);
+  ctx.fillRect(x - barWidth / 2, y, barWidth, barHeight);
 
   // Fill
   const fillPercent = establishment.currentOccupancy / establishment.maxCapacity;
   ctx.fillStyle = color;
-  ctx.fillRect(x - barWidth / 2, barY, barWidth * fillPercent, barHeight);
+  ctx.fillRect(x - barWidth / 2, y, barWidth * fillPercent, barHeight);
 
   // Border
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
   ctx.lineWidth = 1;
-  ctx.strokeRect(x - barWidth / 2, barY, barWidth, barHeight);
+  ctx.strokeRect(x - barWidth / 2, y, barWidth, barHeight);
 
   // Occupancy text
   ctx.fillStyle = '#fff';
@@ -313,7 +367,7 @@ function drawOccupancyBar(ctx: CanvasRenderingContext2D, establishment: Establis
   ctx.fillText(
     `${establishment.currentOccupancy}/${establishment.maxCapacity}`,
     x,
-    barY + barHeight + 14
+    y + barHeight + 14
   );
 }
 
@@ -321,61 +375,78 @@ function drawPeopleGroup(
   ctx: CanvasRenderingContext2D,
   group: PeopleGroup,
   spritesLoaded: boolean,
-  currentTime: number
+  currentTime: number,
+  canvasWidth: number,
+  canvasHeight: number
 ): void {
-  const { x, y } = group.position;
-
-  // Don't draw if visiting (they're "inside") or despawned
+  // Don't draw if visiting or despawned
   if (group.state === 'visiting' || group.state === 'despawned') return;
 
-  // Skip if position is way off screen
-  if (x < -50 || x > 900 || y < -50 || y > 700) return;
+  // Convert grid position directly to isometric screen position
+  const screenPos = gridToIso(group.position.x, group.position.y, canvasWidth, canvasHeight);
 
-  // Try to draw sprite first
-  if (spritesLoaded) {
-    const animation = getPeopleAnimation(group);
-    // Update animation timing - use manifest speed (300ms for people)
-    const sprite = spriteLoader.getSprite(animation.spriteId);
-    const animSpeed = sprite?.manifest?.animationSpeed ?? 300;
-    if (currentTime - animation.lastFrameTime > animSpeed) {
-      animation.currentFrame = (animation.currentFrame + 1) % 2;
-      animation.lastFrameTime = currentTime;
-    }
-    
-    const drawn = drawSprite(ctx, animation, x, y, 1);
-    if (drawn) {
-      // Draw state indicator above sprite
-      drawGroupStateIndicator(ctx, group);
-      return;
-    }
+  // Skip if way off screen
+  if (screenPos.x < -50 || screenPos.x > canvasWidth + 50 || screenPos.y < -50 || screenPos.y > canvasHeight + 50) return;
+
+  const radius = 8 + group.size * 2;
+
+  // Main circle
+  ctx.fillStyle = group.color;
+  ctx.beginPath();
+  ctx.arc(screenPos.x, screenPos.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(screenPos.x, screenPos.y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Direction indicator
+  ctx.fillStyle = '#1a1a2e';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  let directionArrow = '▼';
+  switch (group.facingDirection) {
+    case 'up': directionArrow = '▲'; break;
+    case 'down': directionArrow = '▼'; break;
+    case 'left': directionArrow = '◀'; break;
+    case 'right': directionArrow = '▶'; break;
   }
+  ctx.fillText(directionArrow, screenPos.x, screenPos.y);
 
-  // Fallback: Draw with canvas primitives
-  drawPeopleGroupFallback(ctx, group);
+  // Size badge
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 10px monospace';
+  ctx.fillText(group.size.toString(), screenPos.x, screenPos.y - radius - 8);
+
+  // State indicator
+  drawGroupStateIndicator(ctx, group, screenPos.x, screenPos.y);
 }
 
-function drawGroupStateIndicator(ctx: CanvasRenderingContext2D, group: PeopleGroup): void {
-  const { x, y } = group.position;
-  
+function drawGroupStateIndicator(ctx: CanvasRenderingContext2D, group: PeopleGroup, x: number, y: number): void {
   let stateIcon = '';
   let iconColor = '#fff';
-  
+
   switch (group.state) {
     case 'seeking':
       stateIcon = '🎯';
-      iconColor = '#4ade80'; // Green for seeking
+      iconColor = '#4ade80';
       break;
     case 'wandering':
       stateIcon = '❓';
-      iconColor = '#facc15'; // Yellow for wandering
+      iconColor = '#facc15';
       break;
     case 'leaving':
       stateIcon = '👋';
-      iconColor = '#f87171'; // Red for leaving
+      iconColor = '#f87171';
       break;
     case 'entering':
       stateIcon = '🚪';
-      iconColor = '#60a5fa'; // Blue for entering
+      iconColor = '#60a5fa';
       break;
   }
 

@@ -1,6 +1,10 @@
 # 🏠 Micro Design Document
 ## Test Component 0: Establishment & People Group Interaction
-### Version 0.2 | Isometric Architecture Phase
+### Version 0.2 | Architecture Documentation
+
+> **NOTE**: The isometric renderer described in this document is currently WIP (Work In Progress).
+> The active implementation uses Canvas 2D with direct screen coordinates (pixels).
+> Coordinate system: 800x600 canvas, establishment centered at (400, 300).
 
 ---
 

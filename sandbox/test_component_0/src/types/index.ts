@@ -15,7 +15,8 @@ export type EstablishmentState = 'closed' | 'deserted' | 'visited' | 'busy' | 'c
 
 export interface Establishment {
   id: string;
-  position: Vector2;
+  position: Vector2;  // Screen coordinates for backwards compatibility
+  gridPosition?: Vector2;  // Grid coordinates (optional for now)
   
   // Capacity
   maxCapacity: number;
@@ -153,7 +154,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   spawnInterval: 2000,
   spawnProbability: 0.6,
   maxGroups: 15,
-  groupSpeed: 2.5,  // World units per second (not pixels)
+  groupSpeed: 1.5,  // Grid units per second (half of previous 3 units/sec for 2x slower)
   defaultServiceTime: 8000,
   satisfactionDecayRate: 2,
   moneyPerSecond: 5,

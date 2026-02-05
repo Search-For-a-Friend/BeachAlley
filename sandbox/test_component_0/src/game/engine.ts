@@ -35,6 +35,7 @@ export class GameEngine {
   private config: GameConfig;
   private lastSpawnCheck: number = 0;
   private eventListeners: EventCallback[] = [];
+  private establishmentGridPositions: Map<string, { gridX: number, gridY: number }> = new Map();
   
   constructor(config: Partial<GameConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -42,29 +43,143 @@ export class GameEngine {
   }
   
   private createInitialState(): GameState {
-    // Create establishment in center of world (10x10 grid)
-    const worldWidth = 20;
-    const worldHeight = 20;
-    const centerX = worldWidth / 2;
-    const centerY = worldHeight / 2;
+    // TEST CONFIGURATION: All establishments closed, 4 groups spawn at cardinal directions
+    const establishments: Establishment[] = [];
     
-    const establishment = createEstablishment(
-      { x: centerX, y: centerY },
+    // Convert grid coordinates to screen coordinates for establishment positioning
+    const gridToScreen = (gridX: number, gridY: number) => {
+      const TILE_WIDTH = 64;
+      const TILE_HEIGHT = 32;
+      const GRID_ROWS = 20;
+      const isoX = (gridX - gridY) * (TILE_WIDTH / 2);
+      const isoY = (gridX + gridY) * (TILE_HEIGHT / 2);
+      const offsetX = this.config.canvasWidth / 2;
+      const offsetY = this.config.canvasHeight / 2 - (GRID_ROWS * TILE_HEIGHT / 2);
+      return {
+        x: isoX + offsetX,
+        y: isoY + offsetY
+      };
+    };
+    
+    // Helper to check if position is far enough from others
+    const usedPositions: Set<string> = new Set();
+    const isFarEnough = (gx: number, gy: number, minDist: number = 3): boolean => {
+      for (const posKey of usedPositions) {
+        const [x, y] = posKey.split(',').map(Number);
+        const dist = Math.abs(gx - x) + Math.abs(gy - y);
+        if (dist < minDist) return false;
+      }
+      return true;
+    };
+    
+    // Generate random positions
+    const getRandomGridPos = (size: number): { gridX: number, gridY: number } => {
+      const margin = Math.ceil(size / 2) + 1;
+      let attempts = 0;
+      while (attempts < 100) {
+        const gridX = Math.floor(Math.random() * (20 - margin * 2)) + margin;
+        const gridY = Math.floor(Math.random() * (20 - margin * 2)) + margin;
+        if (isFarEnough(gridX, gridY, 4)) {
+          usedPositions.add(`${gridX},${gridY}`);
+          return { gridX, gridY };
+        }
+        attempts++;
+      }
+      const gridX = 10;
+      const gridY = 10;
+      return { gridX, gridY };
+    };
+    
+    // Create 3 CLOSED establishments at random positions
+    const pos1 = getRandomGridPos(1);
+    const est1Pos = gridToScreen(pos1.gridX, pos1.gridY);
+    const est1 = createEstablishment(
+      est1Pos,
       {
-        maxCapacity: 8,
-        attractionRadius: 6,  // World units
+        maxCapacity: 4,
+        attractionRadius: 4,
         attractionPower: 75,
         serviceTime: this.config.defaultServiceTime,
       }
     );
+    est1.gridPosition = { x: pos1.gridX, y: pos1.gridY };
+    est1.isOpen = false; // CLOSED FOR TEST
+    establishments.push(est1);
+    this.establishmentGridPositions.set(est1.id, { gridX: pos1.gridX, gridY: pos1.gridY });
+    
+    const pos2 = getRandomGridPos(2);
+    const est2Pos = gridToScreen(pos2.gridX, pos2.gridY);
+    const est2 = createEstablishment(
+      est2Pos,
+      {
+        maxCapacity: 8,
+        attractionRadius: 5,
+        attractionPower: 80,
+        serviceTime: this.config.defaultServiceTime,
+      }
+    );
+    est2.gridPosition = { x: pos2.gridX, y: pos2.gridY };
+    est2.isOpen = false; // CLOSED FOR TEST
+    establishments.push(est2);
+    this.establishmentGridPositions.set(est2.id, { gridX: pos2.gridX, gridY: pos2.gridY });
+    
+    const pos3 = getRandomGridPos(3);
+    const est3Pos = gridToScreen(pos3.gridX, pos3.gridY);
+    const est3 = createEstablishment(
+      est3Pos,
+      {
+        maxCapacity: 12,
+        attractionRadius: 6,
+        attractionPower: 85,
+        serviceTime: this.config.defaultServiceTime,
+      }
+    );
+    est3.gridPosition = { x: pos3.gridX, y: pos3.gridY };
+    est3.isOpen = false; // CLOSED FOR TEST
+    establishments.push(est3);
+    this.establishmentGridPositions.set(est3.id, { gridX: pos3.gridX, gridY: pos3.gridY });
+    
+    // Create 4 test groups at visual cardinal directions (isometric diagonals in grid space)
+    // All heading to center and should arrive simultaneously
+    const centerX = 10;
+    const centerY = 10;
+    const testGroups: PeopleGroup[] = [];
+    
+    // TOP of screen (up visually) = both X and Y decrease in grid
+    const topGroup = createPeopleGroup({ x: 4, y: 4 }, this.config);
+    topGroup.targetPosition = { x: centerX, y: centerY };
+    topGroup.state = 'wandering';
+    topGroup.spawnTime = 0;
+    testGroups.push(topGroup);
+    
+    // BOTTOM of screen (down visually) = both X and Y increase in grid
+    const bottomGroup = createPeopleGroup({ x: 16, y: 16 }, this.config);
+    bottomGroup.targetPosition = { x: centerX, y: centerY };
+    bottomGroup.state = 'wandering';
+    bottomGroup.spawnTime = 0;
+    testGroups.push(bottomGroup);
+    
+    // LEFT of screen (left visually) = X decreases, Y increases in grid
+    const leftGroup = createPeopleGroup({ x: 4, y: 16 }, this.config);
+    leftGroup.targetPosition = { x: centerX, y: centerY };
+    leftGroup.state = 'wandering';
+    leftGroup.spawnTime = 0;
+    testGroups.push(leftGroup);
+    
+    // RIGHT of screen (right visually) = X increases, Y decreases in grid
+    const rightGroup = createPeopleGroup({ x: 16, y: 4 }, this.config);
+    rightGroup.targetPosition = { x: centerX, y: centerY };
+    rightGroup.state = 'wandering';
+    rightGroup.spawnTime = 0;
+    testGroups.push(rightGroup);
     
     return {
-      establishments: [establishment],
-      groups: [],
+      establishments,
+      groups: testGroups,
       time: 0,
       isPaused: false,
       stats: {
-        totalGroupsSpawned: 0,
+        totalGroupsSpawned: 4,
         totalGroupsDespawned: 0,
         totalVisits: 0,
         totalRevenue: 0,
@@ -144,7 +259,8 @@ export class GameEngine {
   // PHASE 1: SPAWN
   // ============================================
   private spawnPhase(deltaTime: number): void {
-    // First, transition any spawning groups to idle
+    // TEST MODE: No spawning - we start with 4 test groups
+    // First, transition any spawning groups to their target state
     for (const group of this.state.groups) {
       if (group.state === 'spawning') {
         const timeSinceSpawn = this.state.time - group.spawnTime;
@@ -154,34 +270,8 @@ export class GameEngine {
       }
     }
     
-    this.lastSpawnCheck += deltaTime;
-    
-    if (this.lastSpawnCheck < this.config.spawnInterval) return;
-    this.lastSpawnCheck = 0;
-    
-    // Check spawn conditions
-    if (this.state.groups.length >= this.config.maxGroups) return;
-    if (Math.random() > this.config.spawnProbability) return;
-    
-    // Spawn new group at world grid edges (20x20 world)
-    const worldWidth = 20;
-    const worldHeight = 20;
-    const spawnPos = {
-      x: Math.random() < 0.5 
-        ? randomBetween(1, 3)  // Left side
-        : randomBetween(worldWidth - 3, worldWidth - 1), // Right side
-      y: Math.random() < 0.5
-        ? randomBetween(1, 3)  // Top side
-        : randomBetween(worldHeight - 3, worldHeight - 1), // Bottom side
-    };
-    
-    const group = createPeopleGroup(spawnPos, this.config);
-    group.spawnTime = this.state.time; // Use game time, not Date.now()
-    
-    this.state.groups.push(group);
-    this.state.stats.totalGroupsSpawned++;
-    
-    this.emit({ type: 'GROUP_SPAWNED', group });
+    // Disabled for test: no random spawning
+    return;
   }
   
   // ============================================
@@ -196,13 +286,17 @@ export class GameEngine {
       
       if (target) {
         group.currentEstablishment = target.id;
-        group.targetPosition = { ...target.position };
+        // Set target to grid position of establishment
+        const estGridPos = this.establishmentGridPositions.get(target.id);
+        if (estGridPos) {
+          group.targetPosition = { x: estGridPos.gridX, y: estGridPos.gridY };
+        }
         setGroupState(group, 'seeking');
       } else if (group.state === 'idle') {
-        // No target found, start wandering in world coordinates
+        // No target found, start wandering in grid coordinates (stay in visible area)
         group.targetPosition = {
-          x: randomBetween(2, 18),
-          y: randomBetween(2, 18),
+          x: randomBetween(4, 16),
+          y: randomBetween(4, 16),
         };
         setGroupState(group, 'wandering');
       }
@@ -218,8 +312,11 @@ export class GameEngine {
       if (!establishment.isOpen) continue;
       if (!hasCapacity(establishment, group.size)) continue;
       
-      // Distance check
-      const dist = distance(group.position, establishment.position);
+      // Distance check in grid space
+      const estGridPos = this.establishmentGridPositions.get(establishment.id);
+      if (!estGridPos) continue;
+      
+      const dist = distance(group.position, { x: estGridPos.gridX, y: estGridPos.gridY });
       if (dist > establishment.attractionRadius) continue;
       
       // Calculate attraction score
@@ -265,10 +362,10 @@ export class GameEngine {
       group.previousPosition = prevPos;
       updateGroupFacing(group);
       
-      // Check if reached target
+      // Check if reached target (in grid coordinates, 0.5 is about half a tile)
       const dist = distance(group.position, group.targetPosition);
       
-      if (dist < 5) {
+      if (dist < 0.5) {
         if (group.state === 'seeking') {
           setGroupState(group, 'entering');
         } else if (group.state === 'wandering') {
@@ -301,12 +398,12 @@ export class GameEngine {
       
       // Check if still has capacity
       if (!hasCapacity(establishment, group.size)) {
-        // No room, go back to wandering
+        // No room, go back to wandering in grid space (stay in visible area)
         setGroupState(group, 'wandering');
         group.currentEstablishment = null;
         group.targetPosition = {
-          x: randomBetween(50, this.config.canvasWidth - 50),
-          y: randomBetween(50, this.config.canvasHeight - 50),
+          x: randomBetween(4, 16),
+          y: randomBetween(4, 16),
         };
         continue;
       }
@@ -412,7 +509,7 @@ export class GameEngine {
         removeOccupants(establishment, group.size);
         
         // Set to leaving state
-        group.targetPosition = getExitPosition(group.position);
+        group.targetPosition = getExitPosition(group.position, 20);
         setGroupState(group, 'leaving');
         
         this.emit({
@@ -441,7 +538,7 @@ export class GameEngine {
       }
       
       // Also remove groups that wandered off world
-      if (group.state === 'leaving' && isOutOfBounds(group)) {
+      if (group.state === 'leaving' && isOutOfBounds(group, 20)) {
         toRemove.push(group.id);
         this.state.stats.totalGroupsDespawned++;
         this.emit({ type: 'GROUP_DESPAWNED', groupId: group.id });

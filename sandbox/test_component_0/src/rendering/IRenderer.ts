@@ -11,7 +11,7 @@ export interface IRenderer {
   /**
    * Initialize the renderer
    */
-  initialize(container: HTMLElement, width: number, height: number): void;
+  initialize(container: HTMLElement, width: number, height: number): Promise<void>;
   
   /**
    * Render the current game state
@@ -27,11 +27,6 @@ export interface IRenderer {
    * Resize the renderer
    */
   resize(width: number, height: number): void;
-  
-  /**
-   * Convert screen coordinates to world coordinates (for mouse interaction)
-   */
-  screenToWorld(screenX: number, screenY: number): { x: number; y: number };
   
   /**
    * Convert world coordinates to screen coordinates

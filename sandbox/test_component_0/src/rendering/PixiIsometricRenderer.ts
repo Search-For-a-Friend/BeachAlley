@@ -4,6 +4,9 @@
  * Renders the game using Pixi.js with isometric (diamond tile) perspective
  */
 
+// WIP: Pixi.js isometric renderer - currently not in use, work in progress
+// TODO: Fix Pixi.js v8 API compatibility issues and complete isometric implementation
+
 import * as PIXI from 'pixi.js';
 import { IRenderer, RendererOptions } from './IRenderer';
 import { GameState, Establishment, PeopleGroup } from '../types';
@@ -90,7 +93,7 @@ export class PixiIsometricRenderer implements IRenderer {
       this.isoConfig
     );
     
-    this.gridGraphics.stroke({ width: 1, color: 0x444444, alpha: 0.3 });
+    this.gridGraphics.lineStyle(1, 0x444444, 0.3);
     
     // Draw horizontal lines
     for (const line of horizontalLines) {
@@ -177,41 +180,52 @@ export class PixiIsometricRenderer implements IRenderer {
     }
     
     // Draw diamond tile
-    sprite.fill(fillColor);
-    sprite.alpha = alpha;
-    sprite.poly([
+    sprite.position.set(screenPos.x, screenPos.y);
+    
+    // Set fill style then draw polygon
+    sprite.beginFill(fillColor, alpha);
+    sprite.drawPolygon([
       0, -tileH / 2,     // Top
       tileW / 2, 0,      // Right
       0, tileH / 2,      // Bottom
       -tileW / 2, 0,     // Left
     ]);
-    sprite.closePath();
-    
-    sprite.position.set(screenPos.x, screenPos.y);
+    sprite.endFill();
     
     // Draw border
-    sprite.stroke({ width: 2, color: 0xffffff, alpha: 0.8 });
+    sprite.lineStyle(2, 0xffffff, 0.8);
+    sprite.drawPolygon([
+      0, -tileH / 2,
+      tileW / 2, 0,
+      0, tileH / 2,
+      -tileW / 2, 0,
+      0, -tileH / 2,
+    ]);
     
     // Draw capacity bar
     const barWidth = tileW * 0.6;
     const barHeight = 4;
     const occupancyPercent = establishment.currentOccupancy / establishment.maxCapacity;
     
-    sprite.rect(
+    // Draw capacity bar background
+    sprite.beginFill(0x222222);
+    sprite.drawRect(
       -barWidth / 2,
       tileH / 2 + 5,
       barWidth,
       barHeight
     );
-    sprite.fill(0x222222);
+    sprite.endFill();
     
-    sprite.rect(
+    // Draw capacity bar foreground
+    sprite.beginFill(0x44ff44);
+    sprite.drawRect(
       -barWidth / 2,
       tileH / 2 + 5,
       barWidth * occupancyPercent,
       barHeight
     );
-    sprite.fill(0x44ff44);
+    sprite.endFill();
     
     // Store depth for sorting
     (sprite as any).depth = calculateDepth(
@@ -267,10 +281,13 @@ export class PixiIsometricRenderer implements IRenderer {
         break;
     }
     
-    sprite.circle(0, 0, radius);
-    sprite.fill(fillColor);
-    sprite.stroke({ width: 2, color: 0x000000, alpha: 0.5 });
     sprite.position.set(screenPos.x, screenPos.y);
+    
+    // Draw circle
+    sprite.beginFill(fillColor);
+    sprite.lineStyle(2, 0x000000, 0.5);
+    sprite.drawCircle(0, 0, radius);
+    sprite.endFill();
     
     // Draw direction indicator
     if (group.facingDirection) {
@@ -295,9 +312,9 @@ export class PixiIsometricRenderer implements IRenderer {
       const endX = Math.cos(angle) * indicatorLength;
       const endY = Math.sin(angle) * indicatorLength;
       
+      sprite.lineStyle(2, 0x000000);
       sprite.moveTo(0, 0);
       sprite.lineTo(endX, endY);
-      sprite.stroke({ width: 2, color: 0x000000 });
     }
     
     // Store depth for sorting

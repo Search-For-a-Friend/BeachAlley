@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { GameEngine } from './game';
-import { PixiGameView, StatsPanel, EventLog } from './components';
+import { GameCanvas, StatsPanel, EventLog } from './components';
 import { GameState, GameEvent, DEFAULT_CONFIG } from './types';
 
 const CANVAS_WIDTH = 800;
@@ -112,17 +112,16 @@ export const App: React.FC = () => {
         </div>
         
         <div style={styles.gameArea}>
-          <PixiGameView
-            gameState={gameState}
+          <GameCanvas
+            state={gameState}
             width={CANVAS_WIDTH}
             height={CANVAS_HEIGHT}
-            showGrid={true}
           />
           <div style={styles.instructions}>
-            <p>💠 Isometric diamond tile view with grid visualization</p>
-            <p>👥 Groups spawn and move in world space (flat 2D plane)</p>
-            <p>🏠 Movement speed is constant in world space, varies on screen</p>
-            <p>📊 Rendering is separate from game logic</p>
+            <p>👥 Groups spawn and move around the screen</p>
+            <p>🏠 Click establishments to toggle open/closed</p>
+            <p>🎯 Groups seek nearby establishments when open</p>
+            <p>📊 Watch stats and events in the side panels</p>
           </div>
         </div>
         

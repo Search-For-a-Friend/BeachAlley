@@ -26,7 +26,7 @@ export function createPeopleGroup(
     position: { ...spawnPosition },
     previousPosition: { ...spawnPosition },
     targetPosition: null,
-    speed: config.groupSpeed + randomBetween(-0.5, 0.5),  // World units per second
+    speed: config.groupSpeed,  // Constant speed in grid units per second - visual speed varies due to isometric projection
     facingDirection: 'down' as const,
     state: 'spawning',
     currentEstablishment: null,
@@ -65,27 +65,27 @@ export function getSpawnPosition(canvasWidth: number, canvasHeight: number): Vec
  */
 export function getExitPosition(
   currentPosition: Vector2,
-  worldWidth: number = 20,
-  worldHeight: number = 20
+  gridSize: number = 20
 ): Vector2 {
-  const margin = 0.5;
+  // Exit towards nearest edge, but with some margin to ensure visibility
+  const margin = 1;
   
-  // Determine which edge is nearest and exit there
+  // Determine which edge is nearest and exit there (in grid coordinates)
   const distToTop = currentPosition.y;
-  const distToBottom = worldHeight - currentPosition.y;
+  const distToBottom = gridSize - currentPosition.y;
   const distToLeft = currentPosition.x;
-  const distToRight = worldWidth - currentPosition.x;
+  const distToRight = gridSize - currentPosition.x;
   
   const minDist = Math.min(distToTop, distToBottom, distToLeft, distToRight);
   
   if (minDist === distToTop) {
-    return { x: currentPosition.x, y: -margin };
+    return { x: currentPosition.x, y: 2 };  // Exit near top edge but visible
   } else if (minDist === distToBottom) {
-    return { x: currentPosition.x, y: worldHeight + margin };
+    return { x: currentPosition.x, y: gridSize - 2 };  // Exit near bottom edge
   } else if (minDist === distToLeft) {
-    return { x: -margin, y: currentPosition.y };
+    return { x: 2, y: currentPosition.y };  // Exit near left edge
   } else {
-    return { x: worldWidth + margin, y: currentPosition.y };
+    return { x: gridSize - 2, y: currentPosition.y };  // Exit near right edge
   }
 }
 
@@ -101,15 +101,14 @@ export function setGroupState(group: PeopleGroup, newState: GroupState): void {
  */
 export function isOutOfBounds(
   group: PeopleGroup,
-  worldWidth: number = 20,
-  worldHeight: number = 20
+  gridSize: number = 20
 ): boolean {
-  const margin = 2;
+  const margin = 1;  // Groups are out of bounds if they reach the actual exit points
   return (
-    group.position.x < -margin ||
-    group.position.x > worldWidth + margin ||
-    group.position.y < -margin ||
-    group.position.y > worldHeight + margin
+    group.position.x < margin ||
+    group.position.x > gridSize - margin ||
+    group.position.y < margin ||
+    group.position.y > gridSize - margin
   );
 }
 

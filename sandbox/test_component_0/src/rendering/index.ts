@@ -7,3 +7,4 @@
 export * from './IRenderer';
 export * from './isometricMath';
 export * from './PixiIsometricRenderer';
+export * from './CanvasRenderer';
