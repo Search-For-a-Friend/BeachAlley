@@ -35,7 +35,7 @@ export type EventCallback = (event: GameEvent) => void;
 export class GameEngine {
   private state: GameState;
   private config: GameConfig;
-  private lastSpawnCheck: number = 0;
+  // private lastSpawnCheck: number = 0; // DISABLED: automatic spawn disabled for manual testing
   private eventListeners: EventCallback[] = [];
   private establishmentGridPositions: Map<string, { gridX: number, gridY: number }> = new Map();
   private gridManager: GridManager;
@@ -203,7 +203,7 @@ export class GameEngine {
    */
   reset(): void {
     this.state = this.createInitialState();
-    this.lastSpawnCheck = 0;
+    // this.lastSpawnCheck = 0; // DISABLED: automatic spawn disabled for manual testing
   }
   
   /**
@@ -240,53 +240,54 @@ export class GameEngine {
       }
     }
     
+    // AUTOMATIC SPAWN DISABLED FOR MANUAL TESTING
     // Check if we should spawn a new group
-    this.lastSpawnCheck += deltaTime;
-    
-    if (this.lastSpawnCheck < this.config.spawnInterval) return;
-    if (this.state.groups.length >= this.config.maxGroups) return;
-    
-    this.lastSpawnCheck = 0;
-    
-    // Probabilistic spawn
-    if (Math.random() > this.config.spawnProbability) return;
-    
-    // Spawn at a random SPAWN tile
-    const validSpawnPoints: { x: number; y: number }[] = [];
-    
-    // Find all spawn tiles
-    const tiles = this.gridManager.getAllTiles();
-    for (let y = 0; y < tiles.length; y++) {
-      for (let x = 0; x < tiles[y].length; x++) {
-        const tile = tiles[y][x];
-        if (tile && tile.type === 'spawn') {
-          validSpawnPoints.push({ x, y });
-        }
-      }
-    }
-    
-    if (validSpawnPoints.length === 0) {
-      console.error('❌ No spawn tiles found!');
-      return;
-    }
-    
-    // Pick random valid spawn point
-    const spawnPos = validSpawnPoints[Math.floor(Math.random() * validSpawnPoints.length)];
-    
-    // Spawn at tile center for proper alignment
-    const spawnPosCenter = {
-      x: spawnPos.x + 0.5,
-      y: spawnPos.y + 0.5,
-    };
-    
-    const group = createPeopleGroup(spawnPosCenter, this.config);
-    group.spawnTime = this.state.time;
-    
-    this.state.groups.push(group);
-    this.state.stats.totalGroupsSpawned++;
-    
-    
-    this.emit({ type: 'GROUP_SPAWNED', group });
+    // this.lastSpawnCheck += deltaTime;
+    // 
+    // if (this.lastSpawnCheck < this.config.spawnInterval) return;
+    // if (this.state.groups.length >= this.config.maxGroups) return;
+    // 
+    // this.lastSpawnCheck = 0;
+    // 
+    // // Probabilistic spawn
+    // if (Math.random() > this.config.spawnProbability) return;
+    // 
+    // // Spawn at a random SPAWN tile
+    // const validSpawnPoints: { x: number; y: number }[] = [];
+    // 
+    // // Find all spawn tiles
+    // const tiles = this.gridManager.getAllTiles();
+    // for (let y = 0; y < tiles.length; y++) {
+    //   for (let x = 0; x < tiles[y].length; x++) {
+    //     const tile = tiles[y][x];
+    //     if (tile && tile.type === 'spawn') {
+    //       validSpawnPoints.push({ x, y });
+    //     }
+    //   }
+    // }
+    // 
+    // if (validSpawnPoints.length === 0) {
+    //   console.error('❌ No spawn tiles found!');
+    //   return;
+    // }
+    // 
+    // // Pick random valid spawn point
+    // const spawnPos = validSpawnPoints[Math.floor(Math.random() * validSpawnPoints.length)];
+    // 
+    // // Spawn at tile center for proper alignment
+    // const spawnPosCenter = {
+    //   x: spawnPos.x + 0.5,
+    //   y: spawnPos.y + 0.5,
+    // };
+    // 
+    // const group = createPeopleGroup(spawnPosCenter, this.config);
+    // group.spawnTime = this.state.time;
+    // 
+    // this.state.groups.push(group);
+    // this.state.stats.totalGroupsSpawned++;
+    // 
+    // 
+    // this.emit({ type: 'GROUP_SPAWNED', group });
   }
   
   // ============================================

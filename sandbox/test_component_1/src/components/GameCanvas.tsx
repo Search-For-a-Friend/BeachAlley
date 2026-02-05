@@ -55,6 +55,10 @@ interface GameCanvasProps {
   width: number;
   height: number;
   gridManager?: GridManager;
+  hoveredGroupId?: string | null;
+  selectedGroupId?: string | null;
+  onGroupClick?: (groupId: string) => void;
+  onGroupHover?: (groupId: string | null) => void;
 }
 
 // Track animations by entity ID
@@ -63,7 +67,16 @@ const entityAnimations = new Map<string, SpriteAnimation>();
 /**
  * Canvas-based game renderer with sprite support and pathfinding visualization
  */
-export const GameCanvas: React.FC<GameCanvasProps> = ({ state, width, height, gridManager }) => {
+export const GameCanvas: React.FC<GameCanvasProps> = ({ 
+  state, 
+  width, 
+  height, 
+  gridManager,
+  hoveredGroupId,
+  selectedGroupId,
+  onGroupClick,
+  onGroupHover 
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [spritesLoaded, setSpritesLoaded] = useState(false);
   const animationTimeRef = useRef(0);
@@ -105,23 +118,105 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({ state, width, height, gr
 
     // Draw people groups
     for (const group of state.groups) {
-      drawPeopleGroup(ctx, group, spritesLoaded, animationTimeRef.current, width, height);
+      const isHovered = hoveredGroupId === group.id;
+      const isSelected = selectedGroupId === group.id;
+      drawPeopleGroup(
+        ctx, 
+        group, 
+        spritesLoaded, 
+        animationTimeRef.current, 
+        width, 
+        height,
+        isHovered,
+        isSelected
+      );
     }
 
     // Clean up animations for removed entities
     cleanupAnimations(state);
 
-  }, [state, width, height, spritesLoaded]);
+  }, [state, width, height, spritesLoaded, hoveredGroupId, selectedGroupId]);
+
+  // Mouse interaction handlers
+  const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!onGroupHover) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    // Check if mouse is over any group
+    let hoveredGroup: string | null = null;
+    
+    for (const group of state.groups) {
+      if (group.state === 'visiting' || group.state === 'despawned') continue;
+      
+      const screenPos = gridToIso(group.position.x, group.position.y, width, height);
+      const radius = 8 + group.size * 2;
+      
+      const dx = mouseX - screenPos.x;
+      const dy = mouseY - screenPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= radius + 5) { // Add small margin for easier hovering
+        hoveredGroup = group.id;
+        break;
+      }
+    }
+    
+    onGroupHover(hoveredGroup);
+  };
+
+  const handleMouseClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!onGroupClick) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    // Check if mouse is over any group
+    for (const group of state.groups) {
+      if (group.state === 'visiting' || group.state === 'despawned') continue;
+      
+      const screenPos = gridToIso(group.position.x, group.position.y, width, height);
+      const radius = 8 + group.size * 2;
+      
+      const dx = mouseX - screenPos.x;
+      const dy = mouseY - screenPos.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance <= radius + 5) {
+        onGroupClick(group.id);
+        return;
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (onGroupHover) {
+      onGroupHover(null);
+    }
+  };
 
   return (
     <canvas
       ref={canvasRef}
       width={width}
       height={height}
+      onMouseMove={handleMouseMove}
+      onClick={handleMouseClick}
+      onMouseLeave={handleMouseLeave}
       style={{
         border: '2px solid #ff6b9d',
         borderRadius: '8px',
         boxShadow: '0 0 20px rgba(255, 107, 157, 0.3)',
+        cursor: hoveredGroupId ? 'pointer' : 'default',
       }}
     />
   );
@@ -341,7 +436,8 @@ function drawEstablishment(
     for (let dx = 0; dx < size; dx++) {
       const tileGridX = gridX + dx - Math.floor(size / 2);
       const tileGridY = gridY + dy - Math.floor(size / 2);
-      const tilePos = gridToIso(tileGridX, tileGridY, canvasWidth, canvasHeight);
+      // Use tile CENTER coordinates (add 0.5 to align with grid tiles)
+      const tilePos = gridToIso(tileGridX + 0.5, tileGridY + 0.5, canvasWidth, canvasHeight);
       
       // Draw filled diamond
       ctx.fillStyle = establishment.isOpen ? color : '#333';
@@ -441,13 +537,15 @@ function drawPeopleGroup(
   spritesLoaded: boolean,
   currentTime: number,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
+  isHovered: boolean = false,
+  isSelected: boolean = false
 ): void {
   // Don't draw if visiting or despawned
   if (group.state === 'visiting' || group.state === 'despawned') return;
 
-  // Draw path if group is seeking OR wandering and has a path
-  if ((group.state === 'seeking' || group.state === 'wandering') && group.path && group.path.length > 0) {
+  // Draw path ONLY if hovered or selected
+  if ((isHovered || isSelected) && (group.state === 'seeking' || group.state === 'wandering' || group.state === 'leaving') && group.path && group.path.length > 0) {
     drawPath(ctx, group.path, canvasWidth, canvasHeight, group.color);
   }
 
@@ -468,12 +566,32 @@ function drawPeopleGroup(
   ctx.arc(screenPos.x, screenPos.y, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  // Border
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
+  // Border - highlight if hovered or selected
+  if (isSelected) {
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 4;
+  } else if (isHovered) {
+    ctx.strokeStyle = '#ff0080';
+    ctx.lineWidth = 3;
+  } else {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+  }
   ctx.beginPath();
   ctx.arc(screenPos.x, screenPos.y, radius, 0, Math.PI * 2);
   ctx.stroke();
+  
+  // Add glow effect for selected/hovered
+  if (isSelected || isHovered) {
+    ctx.save();
+    ctx.shadowColor = isSelected ? '#00ffff' : '#ff0080';
+    ctx.shadowBlur = 15;
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.arc(screenPos.x, screenPos.y, radius + 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Direction indicator
   ctx.fillStyle = '#1a1a2e';

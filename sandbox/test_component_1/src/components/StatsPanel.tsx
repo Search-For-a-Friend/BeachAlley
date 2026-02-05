@@ -20,19 +20,20 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({
 }) => {
   return (
     <div style={styles.container}>
-      <h2 style={styles.title}>🎮 Game Controls</h2>
-      
-      <div style={styles.buttonRow}>
-        <button style={styles.button} onClick={onTogglePause}>
-          {state.isPaused ? '▶️ Resume' : '⏸️ Pause'}
-        </button>
-        <button style={styles.button} onClick={onForceSpawn}>
-          👥 Spawn Group
-        </button>
-        <button style={{ ...styles.button, ...styles.dangerButton }} onClick={onReset}>
-          🔄 Reset
-        </button>
-      </div>
+      <div style={styles.content}>
+        <h2 style={styles.title}>🎮 Game Controls</h2>
+        
+        <div style={styles.buttonRow}>
+          <button style={styles.button} onClick={onTogglePause}>
+            {state.isPaused ? '▶️ Resume' : '⏸️ Pause'}
+          </button>
+          <button style={styles.button} onClick={onForceSpawn}>
+            👥 Spawn Group
+          </button>
+          <button style={{ ...styles.button, ...styles.dangerButton }} onClick={onReset}>
+            🔄 Reset
+          </button>
+        </div>
       
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>📊 Statistics</h3>
@@ -79,6 +80,7 @@ export const StatsPanel: React.FC<StatsPanelProps> = ({
           <LegendItem emoji="🏡" label="Busy" color="#f59e0b" />
           <LegendItem emoji="🔥" label="Crowded" color="#ef4444" />
         </div>
+      </div>
       </div>
     </div>
   );
@@ -185,14 +187,21 @@ function formatTime(ms: number): string {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    width: '320px',
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
     backgroundColor: 'rgba(26, 26, 46, 0.95)',
     borderRadius: '12px',
-    padding: '20px',
     border: '2px solid #ff6b9d',
     boxShadow: '0 0 30px rgba(255, 107, 157, 0.2)',
-    maxHeight: '90vh',
+    overflow: 'hidden',
+  },
+  content: {
+    flex: 1,
     overflowY: 'auto',
+    padding: '20px',
+    minHeight: 0,
   },
   title: {
     margin: '0 0 15px 0',

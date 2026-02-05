@@ -76,24 +76,30 @@ function formatEvent(event: GameEvent): { icon: string; message: string; color: 
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    width: '280px',
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
     backgroundColor: 'rgba(26, 26, 46, 0.95)',
     borderRadius: '12px',
     padding: '15px',
     border: '2px solid #00ffff',
     boxShadow: '0 0 20px rgba(0, 255, 255, 0.2)',
+    overflow: 'hidden',
   },
   title: {
     margin: '0 0 10px 0',
     color: '#00ffff',
     fontSize: '1rem',
+    flexShrink: 0,
   },
   list: {
-    maxHeight: '300px',
+    flex: 1,
     overflowY: 'auto',
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
+    minHeight: 0,
   },
   empty: {
     color: 'rgba(255, 255, 255, 0.5)',
