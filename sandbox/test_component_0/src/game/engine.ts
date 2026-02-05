@@ -42,15 +42,17 @@ export class GameEngine {
   }
   
   private createInitialState(): GameState {
-    // Create establishment in center of canvas
-    const centerX = this.config.canvasWidth / 2;
-    const centerY = this.config.canvasHeight / 2;
+    // Create establishment in center of world (10x10 grid)
+    const worldWidth = 20;
+    const worldHeight = 20;
+    const centerX = worldWidth / 2;
+    const centerY = worldHeight / 2;
     
     const establishment = createEstablishment(
       { x: centerX, y: centerY },
       {
         maxCapacity: 8,
-        attractionRadius: 300,
+        attractionRadius: 6,  // World units
         attractionPower: 75,
         serviceTime: this.config.defaultServiceTime,
       }
@@ -161,14 +163,16 @@ export class GameEngine {
     if (this.state.groups.length >= this.config.maxGroups) return;
     if (Math.random() > this.config.spawnProbability) return;
     
-    // Spawn new group INSIDE the canvas (not at edges)
+    // Spawn new group at world grid edges (20x20 world)
+    const worldWidth = 20;
+    const worldHeight = 20;
     const spawnPos = {
       x: Math.random() < 0.5 
-        ? randomBetween(50, 150)  // Left side
-        : randomBetween(this.config.canvasWidth - 150, this.config.canvasWidth - 50), // Right side
+        ? randomBetween(1, 3)  // Left side
+        : randomBetween(worldWidth - 3, worldWidth - 1), // Right side
       y: Math.random() < 0.5
-        ? randomBetween(50, 150)  // Top side
-        : randomBetween(this.config.canvasHeight - 150, this.config.canvasHeight - 50), // Bottom side
+        ? randomBetween(1, 3)  // Top side
+        : randomBetween(worldHeight - 3, worldHeight - 1), // Bottom side
     };
     
     const group = createPeopleGroup(spawnPos, this.config);
@@ -195,10 +199,10 @@ export class GameEngine {
         group.targetPosition = { ...target.position };
         setGroupState(group, 'seeking');
       } else if (group.state === 'idle') {
-        // No target found, start wandering
+        // No target found, start wandering in world coordinates
         group.targetPosition = {
-          x: randomBetween(50, this.config.canvasWidth - 50),
-          y: randomBetween(50, this.config.canvasHeight - 50),
+          x: randomBetween(2, 18),
+          y: randomBetween(2, 18),
         };
         setGroupState(group, 'wandering');
       }
@@ -408,11 +412,7 @@ export class GameEngine {
         removeOccupants(establishment, group.size);
         
         // Set to leaving state
-        group.targetPosition = getExitPosition(
-          group.position,
-          this.config.canvasWidth,
-          this.config.canvasHeight
-        );
+        group.targetPosition = getExitPosition(group.position);
         setGroupState(group, 'leaving');
         
         this.emit({
@@ -440,8 +440,8 @@ export class GameEngine {
         this.emit({ type: 'GROUP_DESPAWNED', groupId: group.id });
       }
       
-      // Also remove groups that wandered off screen
-      if (group.state === 'leaving' && isOutOfBounds(group, this.config.canvasWidth, this.config.canvasHeight)) {
+      // Also remove groups that wandered off world
+      if (group.state === 'leaving' && isOutOfBounds(group)) {
         toRemove.push(group.id);
         this.state.stats.totalGroupsDespawned++;
         this.emit({ type: 'GROUP_DESPAWNED', groupId: group.id });

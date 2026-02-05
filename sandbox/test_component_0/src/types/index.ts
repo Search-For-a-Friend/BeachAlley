@@ -153,7 +153,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   spawnInterval: 2000,
   spawnProbability: 0.6,
   maxGroups: 15,
-  groupSpeed: 80,
+  groupSpeed: 2.5,  // World units per second (not pixels)
   defaultServiceTime: 8000,
   satisfactionDecayRate: 2,
   moneyPerSecond: 5,

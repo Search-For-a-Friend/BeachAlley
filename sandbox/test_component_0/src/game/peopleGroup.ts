@@ -26,7 +26,7 @@ export function createPeopleGroup(
     position: { ...spawnPosition },
     previousPosition: { ...spawnPosition },
     targetPosition: null,
-    speed: config.groupSpeed + randomBetween(-10, 10),
+    speed: config.groupSpeed + randomBetween(-0.5, 0.5),  // World units per second
     facingDirection: 'down' as const,
     state: 'spawning',
     currentEstablishment: null,
@@ -61,31 +61,31 @@ export function getSpawnPosition(canvasWidth: number, canvasHeight: number): Vec
 }
 
 /**
- * Get exit position (opposite edge from spawn)
+ * Get exit position (edge of world)
  */
 export function getExitPosition(
   currentPosition: Vector2,
-  canvasWidth: number,
-  canvasHeight: number
+  worldWidth: number = 20,
+  worldHeight: number = 20
 ): Vector2 {
-  const margin = 50;
+  const margin = 0.5;
   
-  // Determine which edge is furthest and exit there
+  // Determine which edge is nearest and exit there
   const distToTop = currentPosition.y;
-  const distToBottom = canvasHeight - currentPosition.y;
+  const distToBottom = worldHeight - currentPosition.y;
   const distToLeft = currentPosition.x;
-  const distToRight = canvasWidth - currentPosition.x;
+  const distToRight = worldWidth - currentPosition.x;
   
-  const maxDist = Math.max(distToTop, distToBottom, distToLeft, distToRight);
+  const minDist = Math.min(distToTop, distToBottom, distToLeft, distToRight);
   
-  if (maxDist === distToTop) {
+  if (minDist === distToTop) {
     return { x: currentPosition.x, y: -margin };
-  } else if (maxDist === distToBottom) {
-    return { x: currentPosition.x, y: canvasHeight + margin };
-  } else if (maxDist === distToLeft) {
+  } else if (minDist === distToBottom) {
+    return { x: currentPosition.x, y: worldHeight + margin };
+  } else if (minDist === distToLeft) {
     return { x: -margin, y: currentPosition.y };
   } else {
-    return { x: canvasWidth + margin, y: currentPosition.y };
+    return { x: worldWidth + margin, y: currentPosition.y };
   }
 }
 
@@ -97,19 +97,19 @@ export function setGroupState(group: PeopleGroup, newState: GroupState): void {
 }
 
 /**
- * Check if group has left the canvas
+ * Check if group has left the world bounds
  */
 export function isOutOfBounds(
   group: PeopleGroup,
-  canvasWidth: number,
-  canvasHeight: number
+  worldWidth: number = 20,
+  worldHeight: number = 20
 ): boolean {
-  const margin = 100;
+  const margin = 2;
   return (
     group.position.x < -margin ||
-    group.position.x > canvasWidth + margin ||
+    group.position.x > worldWidth + margin ||
     group.position.y < -margin ||
-    group.position.y > canvasHeight + margin
+    group.position.y > worldHeight + margin
   );
 }
 
