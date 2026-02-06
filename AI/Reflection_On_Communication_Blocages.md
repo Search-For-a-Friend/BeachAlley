@@ -292,4 +292,136 @@ When a mockup shows elements overlapping:
 
 ---
 
+### 6. **Git Operations Without User Approval**
+
+**Issue**: Multiple times I committed and/or pushed code changes without asking the user first, despite user explicitly requesting to ask before doing so.
+
+**Root Cause**:
+- Moving too fast to "complete" the task
+- Not maintaining the user's explicit workflow preference in context
+- Treating git operations as "automatic cleanup" rather than requiring approval
+
+**Lesson**: Git operations (commit and push) are CRITICAL checkpoints where user wants to:
+1. Review changes themselves
+2. Test functionality
+3. Make decisions about what to commit
+4. Control when changes go to remote repository
+
+**Concrete Rule**:
+```
+BEFORE any git operation:
+1. git add → ASK USER first
+2. git commit → ASK USER first  
+3. git push → ASK USER first
+
+NEVER assume completion = automatic commit
+NEVER commit "to finish the task"
+ALWAYS wait for explicit user approval
+```
+
+**Implementation**:
+- After completing work: "Changes are ready. Would you like me to commit these?"
+- If user says yes: Show what will be committed, ask for approval
+- Wait for explicit "yes commit and push" before executing
+
+**Why This Matters**:
+- User may want to test first
+- User may want to review code personally
+- User may want to batch multiple changes
+- User controls their git history and what goes to remote
+
+**Updated Rule**: NEVER commit or push without EXPLICIT user approval, even if code is complete and working. User workflow takes precedence over task completion.
+
+---
+
+### 7. **Smartphone Compatibility - Critical Constraint Not Prioritized**
+
+**Issue**: Multiple implementations did not properly fit smartphone displays, requiring user to repeatedly point out that UI is not smartphone-compatible, despite this being an extremely high priority constraint for the project.
+
+**Root Cause**:
+- Treating smartphone optimization as "nice to have" rather than PRIMARY constraint
+- Testing mentally on desktop viewport, not mobile
+- Using absolute sizes (px, rem) without proper viewport constraints
+- Not considering actual device dimensions (small screens)
+- Not using viewport units (vh, vw) and proper overflow management
+
+**Critical Lesson**: For this project, smartphone compatibility is THE PRIMARY constraint, not a secondary concern.
+
+**Concrete Requirements for Smartphone UI**:
+```
+ALWAYS ensure:
+1. Content fits within viewport (no overflow cutting off content)
+2. Use viewport units (vh, vw) for containers
+3. Scrollable content must have explicit overflow-y: auto
+4. Fixed elements (tabs, headers) must not push content off-screen
+5. Font sizes must scale with viewport (use clamp())
+6. Touch targets must be large enough (min 44px)
+7. Test mental model: "Would this fit on a 375x667px screen?"
+```
+
+**Red Flags I'm Doing It Wrong**:
+- Using fixed heights that could exceed viewport
+- Grid layouts that might not fit vertically
+- Large padding/gaps that accumulate
+- Not accounting for browser chrome/system UI
+- Content extends beyond 100vh without scroll
+
+**Implementation Checklist**:
+```
+Before implementing any UI:
+[ ] Calculate total height of all elements
+[ ] Ensure it fits in ~600px vertical space (safe mobile viewport)
+[ ] Make primary content area scrollable if needed
+[ ] Use flex-shrink appropriately
+[ ] Test with "what if viewport is only 375px wide?"
+```
+
+**Why This Matters So Much**:
+- This is a smartphone-first game/app
+- User is testing primarily on smartphone
+- Desktop is secondary, mobile is primary use case
+- Every UI that doesn't fit is a complete failure of core requirement
+
+**Updated Rule**: SMARTPHONE COMPATIBILITY IS THE PRIMARY CONSTRAINT. Every UI must be designed mobile-first, fitting within small viewports (375x667px minimum). Desktop is the adaptation, not the default.
+
+---
+
+### 8. **Version Tracking During Rapid Iteration**
+
+**Issue**: During rapid iteration with many small changes, it became difficult for the user to track which version they were testing on their smartphone, especially when multiple fixes were applied in quick succession.
+
+**Solution Implemented**: Random version names displayed on splash screen.
+
+**Concrete Rule**:
+```
+AFTER each response that includes code changes:
+1. Generate a random version name (object, animal, or thing)
+2. Update the splash screen to display this version name at the bottom
+3. This allows user to:
+   - Know if changes were actually applied
+   - Track which version had good/bad results
+   - Reference specific versions in feedback
+```
+
+**Implementation**:
+- Add version name to SplashScreen component at bottom
+- Use random, memorable names (e.g., "Golden Pineapple", "Purple Octopus", "Dancing Coconut")
+- Keep it visible but subtle (small font, low opacity)
+
+**Why This Matters**:
+- User tests on physical device (smartphone) separate from development machine
+- Need to confirm changes deployed/refreshed properly
+- Makes feedback more specific ("the grass issue was in Ruby Starfish")
+- Helps track regression ("it was working in Jade Turtle")
+
+**Updated Rule**: ALWAYS update version name on splash screen after code changes. This helps both user and assistant track which version is being tested.
+
+**CRITICAL**: NEVER reuse a version name, even if reverting changes. Each iteration must have a unique name because:
+- Code has changed (even reverts are changes)
+- User needs to track different attempts
+- "Going back" to a previous name creates confusion about what was tested when
+- Version names are chronological markers, not state descriptors
+
+---
+
 *This document should be reviewed at the start of each session and updated with new learnings.*

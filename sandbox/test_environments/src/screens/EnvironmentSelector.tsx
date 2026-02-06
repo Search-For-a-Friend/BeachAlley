@@ -40,22 +40,12 @@ export const EnvironmentSelector: React.FC<EnvironmentSelectorProps> = ({
                 ...(selectedEnvironment === env.type ? styles.cardSelected : {}),
               }}
               onClick={() => handleSelect(env.type)}
-              onMouseEnter={(e) => {
-                if (selectedEnvironment !== env.type) {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 255, 255, 0.3)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (selectedEnvironment !== env.type) {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
-                }
-              }}
             >
               <div style={styles.cardIcon}>{env.icon}</div>
-              <div style={styles.cardName}>{env.name}</div>
-              <div style={styles.cardDescription}>{env.description}</div>
+              <div style={styles.cardContent}>
+                <div style={styles.cardName}>{env.name}</div>
+                <div style={styles.cardDescription}>{env.description}</div>
+              </div>
               {selectedEnvironment === env.type && (
                 <div style={styles.checkmark}>✓</div>
               )}
@@ -79,20 +69,9 @@ export const EnvironmentSelector: React.FC<EnvironmentSelectorProps> = ({
 };
 
 const keyframes = `
-  @keyframes gradientShift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
-
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
-  }
-
-  @keyframes glow {
-    0%, 100% { box-shadow: 0 0 20px rgba(0, 255, 255, 0.5); }
-    50% { box-shadow: 0 0 30px rgba(0, 255, 255, 0.8); }
   }
 `;
 
@@ -100,123 +79,127 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
+    height: '100vh',
+    maxHeight: '-webkit-fill-available',
     width: '100vw',
-    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
-    backgroundSize: '200% 200%',
-    animation: 'gradientShift 10s ease infinite',
+    background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
     color: '#fff',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    overflow: 'auto',
-    padding: '20px',
+    overflow: 'hidden',
+    position: 'fixed',
+    top: 0,
+    left: 0,
   },
   content: {
-    maxWidth: '100%',
-    width: '100%',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    gap: '30px',
+    flex: 1,
+    minHeight: 0,
+    padding: '12px',
+    gap: '10px',
   },
   title: {
-    fontSize: 'clamp(2rem, 8vw, 3rem)',
+    fontSize: 'clamp(1.1rem, 4vw, 1.4rem)',
     fontWeight: 'bold',
     margin: 0,
-    background: 'linear-gradient(90deg, #FF0080, #00ffff, #FF0080)',
-    backgroundSize: '200% 100%',
+    background: 'linear-gradient(135deg, #FF6B35, #FF0080, #00FFFF)',
     backgroundClip: 'text',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
-    animation: 'gradientShift 3s ease infinite',
     textAlign: 'center',
+    flexShrink: 0,
+    lineHeight: 1.2,
   },
   subtitle: {
-    fontSize: 'clamp(1rem, 4vw, 1.2rem)',
+    fontSize: 'clamp(0.7rem, 2.5vw, 0.85rem)',
     color: 'rgba(255, 255, 255, 0.7)',
     margin: 0,
     textAlign: 'center',
-    padding: '0 20px',
+    flexShrink: 0,
+    lineHeight: 1.3,
   },
   grid: {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    width: '100%',
-    maxWidth: '500px',
-    padding: '0 10px',
+    gap: '8px',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    padding: '2px',
+    minHeight: 0,
+    WebkitOverflowScrolling: 'touch',
   },
   card: {
     position: 'relative',
     display: 'flex',
-    flexDirection: 'column',
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: '12px',
-    padding: '20px',
+    gap: '10px',
+    padding: '10px',
     background: 'rgba(26, 26, 46, 0.8)',
     border: '2px solid rgba(255, 255, 255, 0.2)',
-    borderRadius: '16px',
+    borderRadius: '8px',
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    minHeight: '140px',
+    transition: 'all 0.2s ease',
     backdropFilter: 'blur(10px)',
-    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+    flexShrink: 0,
   },
   cardSelected: {
     background: 'rgba(0, 255, 255, 0.15)',
-    border: '3px solid #00ffff',
-    boxShadow: '0 0 20px rgba(0, 255, 255, 0.5)',
-    transform: 'scale(1.05)',
+    border: '2px solid #00ffff',
+    boxShadow: '0 0 15px rgba(0, 255, 255, 0.4)',
   },
   cardIcon: {
-    fontSize: '3rem',
-    marginBottom: '4px',
+    fontSize: 'clamp(2rem, 8vw, 2.5rem)',
+    flexShrink: 0,
+  },
+  cardContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    minWidth: 0,
   },
   cardName: {
-    fontSize: '1.1rem',
+    fontSize: 'clamp(0.9rem, 3.5vw, 1rem)',
     fontWeight: 'bold',
     color: '#fff',
-    textAlign: 'center',
   },
   cardDescription: {
-    fontSize: '0.85rem',
-    color: 'rgba(255, 255, 255, 0.7)',
-    textAlign: 'center',
-    lineHeight: '1.4',
+    fontSize: 'clamp(0.7rem, 2.5vw, 0.75rem)',
+    color: 'rgba(255, 255, 255, 0.6)',
+    lineHeight: '1.2',
   },
   checkmark: {
-    position: 'absolute',
-    top: '10px',
-    right: '10px',
-    width: '32px',
-    height: '32px',
+    width: '20px',
+    height: '20px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     background: '#00ffff',
     color: '#1a1a2e',
     borderRadius: '50%',
-    fontSize: '1.2rem',
+    fontSize: '0.8rem',
     fontWeight: 'bold',
-    animation: 'pulse 1s ease infinite',
+    flexShrink: 0,
   },
   startButton: {
-    padding: '14px 40px',
-    fontSize: '1.1rem',
+    padding: '12px',
+    fontSize: 'clamp(0.95rem, 3.5vw, 1rem)',
     fontWeight: 'bold',
     border: 'none',
-    borderRadius: '12px',
+    borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    marginTop: '10px',
     width: '100%',
-    maxWidth: '300px',
+    flexShrink: 0,
+    minHeight: '44px',
+    touchAction: 'manipulation',
   },
   startButtonEnabled: {
-    background: 'linear-gradient(90deg, #FF0080, #00ffff)',
+    background: 'linear-gradient(135deg, #FF6B35, #FF0080)',
     color: '#fff',
-    boxShadow: '0 4px 16px rgba(0, 255, 255, 0.4)',
+    boxShadow: '0 4px 15px rgba(255, 0, 128, 0.4)',
   },
   startButtonDisabled: {
     background: 'rgba(255, 255, 255, 0.1)',

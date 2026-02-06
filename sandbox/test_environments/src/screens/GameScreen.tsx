@@ -1,49 +1,45 @@
-// Simple game screen that displays the canvas with terrain
-
-import React from 'react';
-import { TopBar } from '../components/TopBar';
-import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
+import React, { useState } from 'react';
+import { LayoutTabbed } from '../layouts/LayoutTabbed';
 import { TerrainMap } from '../types/environment';
 
 interface GameScreenProps {
+  onBackToMenu: () => void;
   terrainMap: TerrainMap;
   environmentName: string;
-  onBackToMenu: () => void;
 }
 
-export const GameScreen: React.FC<GameScreenProps> = ({
-  terrainMap,
-  environmentName,
+type LayoutType = 'tabbed';
+
+export const GameScreen: React.FC<GameScreenProps> = ({ 
   onBackToMenu,
+  terrainMap,
+  environmentName 
 }) => {
-  return (
-    <div style={styles.container}>
-      <TopBar onBack={onBackToMenu} title={environmentName} />
-      
-      <div style={styles.gameView}>
-        <InteractiveCanvas terrainMap={terrainMap} />
-      </div>
-    </div>
-  );
+  const [currentLayout] = useState<LayoutType>('tabbed');
+  const [animationsEnabled, setAnimationsEnabled] = useState(true);
+
+  const renderLayout = () => {
+    const commonProps = {
+      onBack: onBackToMenu,
+      onChangeLayout: () => console.log('Change layout'),
+      animationsEnabled,
+      onToggleAnimations: () => setAnimationsEnabled(!animationsEnabled),
+      terrainMap,
+    };
+
+    return <LayoutTabbed {...commonProps} />;
+  };
+
+  return <div style={styles.container}>{renderLayout()}</div>;
 };
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100vh',
-    width: '100vw',
-    background: '#1a1a2e',
-    color: '#fff',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    overflow: 'hidden',
-  },
-  gameView: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: '100%',
+    height: '100%',
     overflow: 'hidden',
     position: 'relative',
   },
 };
+
+export default GameScreen;
