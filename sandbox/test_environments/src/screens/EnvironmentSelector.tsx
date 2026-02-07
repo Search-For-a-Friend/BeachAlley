@@ -3,13 +3,16 @@
 import React, { useState } from 'react';
 import { EnvironmentType } from '../types/environment';
 import { ENVIRONMENTS } from '../data/environments';
+import { TopBar } from '../components/TopBar';
 
 interface EnvironmentSelectorProps {
   onSelectEnvironment: (type: EnvironmentType) => void;
+  onBack: () => void;
 }
 
 export const EnvironmentSelector: React.FC<EnvironmentSelectorProps> = ({
   onSelectEnvironment,
+  onBack,
 }) => {
   const [selectedEnvironment, setSelectedEnvironment] = useState<EnvironmentType | null>(null);
 
@@ -27,43 +30,50 @@ export const EnvironmentSelector: React.FC<EnvironmentSelectorProps> = ({
     <div style={styles.container}>
       <style>{keyframes}</style>
 
-      <div style={styles.content}>
-        <h1 style={styles.title}>Choose Your Paradise 🌅</h1>
-        <p style={styles.subtitle}>Select an environment to begin your beach resort adventure</p>
+      <TopBar
+        title="Choose Your Paradise"
+        onBack={onBack}
+        showStats={false}
+      />
 
-        <div style={styles.grid}>
-          {ENVIRONMENTS.map((env) => (
-            <button
-              key={env.type}
-              style={{
-                ...styles.card,
-                ...(selectedEnvironment === env.type ? styles.cardSelected : {}),
-              }}
-              onClick={() => handleSelect(env.type)}
-            >
-              <div style={styles.cardIcon}>{env.icon}</div>
-              <div style={styles.cardContent}>
-                <div style={styles.cardName}>{env.name}</div>
-                <div style={styles.cardDescription}>{env.description}</div>
-              </div>
-              {selectedEnvironment === env.type && (
-                <div style={styles.checkmark}>✓</div>
-              )}
-            </button>
-          ))}
+      <div style={styles.contentWrapper}>
+        <div style={styles.contentBlock}>
+          <p style={styles.subtitle}>Select an environment to begin your beach resort adventure</p>
+
+          <div style={styles.grid}>
+            {ENVIRONMENTS.map((env) => (
+              <button
+                key={env.type}
+                style={{
+                  ...styles.card,
+                  ...(selectedEnvironment === env.type ? styles.cardSelected : {}),
+                }}
+                onClick={() => handleSelect(env.type)}
+              >
+                <div style={styles.cardIcon}>{env.icon}</div>
+                <div style={styles.cardContent}>
+                  <div style={styles.cardName}>{env.name}</div>
+                  <div style={styles.cardDescription}>{env.description}</div>
+                </div>
+                {selectedEnvironment === env.type && (
+                  <div style={styles.checkmark}>✓</div>
+                )}
+              </button>
+            ))}
+          </div>
+
         </div>
-
-        <button
-          style={{
-            ...styles.startButton,
-            ...(selectedEnvironment ? styles.startButtonEnabled : styles.startButtonDisabled),
-          }}
-          onClick={handleStart}
-          disabled={!selectedEnvironment}
-        >
-          Start Game
-        </button>
       </div>
+      <button
+        style={{
+          ...styles.startButton,
+          ...(selectedEnvironment ? styles.startButtonEnabled : styles.startButtonDisabled),
+        }}
+        onClick={handleStart}
+        disabled={!selectedEnvironment}
+      >
+        Start Game
+      </button>
     </div>
   );
 };
@@ -90,25 +100,22 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     left: 0,
   },
-  content: {
-    display: 'flex',
-    flexDirection: 'column',
+  contentWrapper: {
     flex: 1,
     minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: '12px',
-    gap: '10px',
   },
-  title: {
-    fontSize: 'clamp(1.1rem, 4vw, 1.4rem)',
-    fontWeight: 'bold',
-    margin: 0,
-    background: 'linear-gradient(135deg, #FF6B35, #FF0080, #00FFFF)',
-    backgroundClip: 'text',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    textAlign: 'center',
+  contentBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    width: '100%',
+    maxWidth: '100%',
     flexShrink: 0,
-    lineHeight: 1.2,
   },
   subtitle: {
     fontSize: 'clamp(0.7rem, 2.5vw, 0.85rem)',
@@ -119,14 +126,13 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.3,
   },
   grid: {
-    flex: 1,
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
     overflowY: 'auto',
     overflowX: 'hidden',
     padding: '2px',
-    minHeight: 0,
+    maxHeight: '55vh',
     WebkitOverflowScrolling: 'touch',
   },
   card: {
@@ -184,6 +190,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   startButton: {
+    margin: '12px',
     padding: '12px',
     fontSize: 'clamp(0.95rem, 3.5vw, 1rem)',
     fontWeight: 'bold',
@@ -191,7 +198,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    width: '100%',
     flexShrink: 0,
     minHeight: '44px',
     touchAction: 'manipulation',

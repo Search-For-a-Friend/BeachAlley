@@ -56,7 +56,10 @@ function App() {
         <MainMenu onStartGame={handleStartGame} />
       )}
       {currentScreen === 'environmentSelection' && (
-        <EnvironmentSelector onSelectEnvironment={handleSelectEnvironment} />
+        <EnvironmentSelector
+          onSelectEnvironment={handleSelectEnvironment}
+          onBack={handleBackToMenu}
+        />
       )}
       {currentScreen === 'game' && terrainMap && (
         <GameScreen 

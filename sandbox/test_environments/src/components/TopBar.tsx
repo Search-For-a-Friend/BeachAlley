@@ -4,26 +4,34 @@ interface TopBarProps {
   onBack?: () => void;
   onSettings?: () => void;
   title?: string;
+  /** If true, show stats (💰, ⭐). Default true for game, false when omitted. */
+  showStats?: boolean;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ onBack, onSettings, title = 'Beach Alley' }) => {
+export const TopBar: React.FC<TopBarProps> = ({ onBack, onSettings, title = 'Beach Alley', showStats = true }) => {
   return (
     <div style={styles.container}>
-      <button style={styles.button} onClick={onBack}>
+      <button style={styles.button} onClick={onBack} aria-label="Back">
         ◀️
       </button>
-      
+
       <div style={styles.titleSection}>
         <h2 style={styles.title}>{title}</h2>
-        <div style={styles.stats}>
-          <span style={styles.stat}>💰 1,234</span>
-          <span style={styles.stat}>⭐ 89%</span>
-        </div>
+        {showStats && (
+          <div style={styles.stats}>
+            <span style={styles.stat}>💰 1,234</span>
+            <span style={styles.stat}>⭐ 89%</span>
+          </div>
+        )}
       </div>
-      
-      <button style={styles.button} onClick={onSettings}>
-        ⚙️
-      </button>
+
+      {onSettings != null ? (
+        <button style={styles.button} onClick={onSettings} aria-label="Settings">
+          ⚙️
+        </button>
+      ) : (
+        <div style={styles.buttonPlaceholder} />
+      )}
     </div>
   );
 };
@@ -70,6 +78,11 @@ const styles: Record<string, React.CSSProperties> = {
   stat: {
     fontSize: '0.8rem',
     color: '#fff',
+  },
+  buttonPlaceholder: {
+    width: '40px',
+    height: '40px',
+    flexShrink: 0,
   },
 };
 

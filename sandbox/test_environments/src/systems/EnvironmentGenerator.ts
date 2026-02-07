@@ -91,12 +91,12 @@ export class EnvironmentGenerator {
         break;
     }
 
-    // Step 2: Mark all tiles in path sequence as grass
+    // Step 2: Mark all tiles in path sequence as GRASS (main line)
     pathSequence.forEach(({ row, col }) => {
       tiles.set(tileKey(row, col), 'grass');
     });
 
-    // Step 3: Mark all 8 neighbors of path tiles as grass
+    // Step 3: Mark all 8 neighbors of path tiles as GRASS (thick line/area)
     pathSequence.forEach(({ row, col }) => {
       for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
@@ -109,11 +109,11 @@ export class EnvironmentGenerator {
       }
     });
 
-    // Step 4: Grass filling
+    // Step 4: Grass filling (filling is GRASS, line is SAND)
     for (let row = 0; row < this.mapRows; row++) {
       for (let col = 0; col < this.mapCols; col++) {
         const key = tileKey(row, col);
-        if (tiles.get(key) !== 'grass') { // If not already grass
+        if (tiles.get(key) === 'water') { // Only fill water tiles (not sand line)
           switch (type) {
             case 'seafront':
               if (this.isInsideSeafront(row, col)) tiles.set(key, 'grass');
@@ -150,37 +150,43 @@ export class EnvironmentGenerator {
 
   // ===== PATH GENERATION METHODS (geometric shapes, no noise) =====
 
+  /**
+   * Seafront path: reuse ONE of the peninsula's organic lines (left or right)
+   * as the shoreline, so the shape is naturally curved across the diamond.
+   */
   private generateStraightLinePath(): Array<{ row: number; col: number }> {
     const path: Array<{ row: number; col: number }> = [];
-    
-    // Random angle for the line
-    if (this.seafrontLineAngle === 0 && this.seafrontLineOffset === 0) {
-      this.seafrontLineAngle = this.random.next() * Math.PI * 2;
-      this.seafrontLineOffset = 0;
-    }
 
-    // Trace line across entire map with slight variations
-    const centerRow = this.mapRows / 2;
-    const centerCol = this.mapCols / 2;
+    // Randomly choose which peninsula line to reuse
+    const useRight = this.random.next() < 0.5;
+    this.seafrontLineSide = useRight ? 'right' : 'left';
 
-    const perpAngle = this.seafrontLineAngle + Math.PI / 2;
-    const length = Math.max(this.mapRows, this.mapCols) * 1.5;
+    for (let step = 0; step < this.mapRows + this.mapCols; step++) {
+      const lineOffset = useRight
+        ? this.rightLinePath.get(step)
+        : this.leftLinePath.get(step);
 
-    for (let t = -length; t <= length; t += 0.5) {
-      // Add slight perpendicular variation using noise
-      const variation = this.noise.noise2D(t * 0.05, 0) * 3;
-      
-      const x = centerCol + t * Math.cos(perpAngle) + variation * Math.cos(this.seafrontLineAngle);
-      const y = centerRow + t * Math.sin(perpAngle) + variation * Math.sin(this.seafrontLineAngle);
-      const col = Math.round(x);
-      const row = Math.round(y);
+      if (lineOffset === undefined) continue;
 
-      if (row >= 0 && row < this.mapRows && col >= 0 && col < this.mapCols) {
-        if (!path.some(p => p.row === row && p.col === col)) {
-          path.push({ row, col });
+      // For this diagonal step, find the tile whose distanceFromDiagonal
+      // matches the chosen line's offset.
+      for (let row = 0; row < this.mapRows; row++) {
+        const col = step - row;
+        if (col < 0 || col >= this.mapCols) continue;
+
+        const distanceFromDiagonal = col - row;
+
+        if (distanceFromDiagonal === lineOffset) {
+          if (!path.some(p => p.row === row && p.col === col)) {
+            path.push({ row, col });
+          }
         }
       }
     }
+
+    // After selecting which geometric line we use, decide which side of it
+    // should become grass (the side with more tiles).
+    this.initializeSeafrontFillSide();
 
     return path;
   }
@@ -253,17 +259,13 @@ export class EnvironmentGenerator {
 
     const centerRow = this.coveCenter!.row;
     const centerCol = this.coveCenter!.col;
-    const baseRadius = this.coveOuterRadius;
+    const radius = this.coveOuterRadius;
 
-    // Generate circle points with variations (only those inside map bounds)
-    const numPoints = Math.ceil(baseRadius * Math.PI * 2 * 2);
+    // Generate circle points (perfect circle, no variations)
+    const numPoints = Math.ceil(radius * Math.PI * 2 * 2);
     
     for (let i = 0; i < numPoints; i++) {
       const angle = (i / numPoints) * Math.PI * 2;
-      
-      // Add radius variation using noise
-      const radiusVariation = this.noise.noise2D(Math.cos(angle) * 5, Math.sin(angle) * 5) * 2;
-      const radius = baseRadius + radiusVariation;
       
       const x = centerCol + radius * Math.cos(angle);
       const y = centerRow + radius * Math.sin(angle);
@@ -318,112 +320,106 @@ export class EnvironmentGenerator {
 
   // ===== ORIGINAL FILLING METHODS (kept for later use) =====
 
-  // ===== SEAFRONT: Straight line with random orientation =====
-  private seafrontLineAngle: number = 0;
-  private seafrontLineOffset: number = 0;
+  // ===== SEAFRONT: Organic line based on peninsula geometry =====
+  private seafrontFillSign: number = 1;
+  private seafrontLineSide: 'left' | 'right' = 'left';
 
-  private initializeSeafront(): void {
-    // Random angle (0-360 degrees)
-    this.seafrontLineAngle = this.random.next() * Math.PI * 2;
-    // Line goes through center with slight offset
-    this.seafrontLineOffset = (this.random.next() - 0.5) * 10;
+  /**
+   * Get the "effective" line position (distanceFromDiagonal) for a given
+   * diagonal step, using the selected peninsula line and averaging with
+   * neighboring steps for continuity.
+   */
+  private getSeafrontLinePosition(step: number): number | undefined {
+    const map =
+      this.seafrontLineSide === 'right'
+        ? this.rightLinePath
+        : this.leftLinePath;
+
+    const base = map.get(step);
+    if (base === undefined) return undefined;
+
+    const prev = map.get(step - 1);
+    const next = map.get(step + 1);
+
+    const a = base;
+    const b = prev !== undefined ? prev : base;
+    const c = next !== undefined ? next : base;
+
+    return Math.round((a + b + c) / 3);
+  }
+
+  /**
+   * Decide which side of the seafront line should become grass.
+   * We pick the side that covers the larger portion of the map
+   * so the fill always targets the "wider" part of the split.
+   */
+  private initializeSeafrontFillSide(): void {
+    let positiveCount = 0;
+    let negativeCount = 0;
+
+    for (let row = 0; row < this.mapRows; row++) {
+      for (let col = 0; col < this.mapCols; col++) {
+        const diagonalStep = row + col;
+        const linePos = this.getSeafrontLinePosition(diagonalStep);
+        if (linePos === undefined) continue;
+
+        const distanceFromDiagonal = col - row;
+        const delta = distanceFromDiagonal - linePos;
+
+        if (delta > 0) positiveCount++;
+        else if (delta < 0) negativeCount++;
+      }
+    }
+
+    this.seafrontFillSign = positiveCount >= negativeCount ? 1 : -1;
   }
 
   private isInsideSeafront(row: number, col: number): boolean {
-    if (this.seafrontLineAngle === 0 && this.seafrontLineOffset === 0) {
-      this.initializeSeafront();
+    const diagonalStep = row + col;
+    const linePos = this.getSeafrontLinePosition(diagonalStep);
+    if (linePos === undefined) {
+      return false;
     }
 
-    // Calculate distance from line with slight variation
-    const centerRow = this.mapRows / 2;
-    const centerCol = this.mapCols / 2;
-    const relRow = row - centerRow;
-    const relCol = col - centerCol;
+    const distanceFromDiagonal = col - row;
+    const delta = distanceFromDiagonal - linePos;
 
-    // Perpendicular distance from line
-    const dist = relRow * Math.cos(this.seafrontLineAngle) - relCol * Math.sin(this.seafrontLineAngle);
-    const noise = this.noise.noise2D(row * 0.05, col * 0.05) * 3;
-
-    return (dist + noise + this.seafrontLineOffset) > 0;
+    // `seafrontFillSign` is chosen so that we always keep the *wider*
+    // side of the map as grass, relative to the curved peninsula-based line.
+    return this.seafrontFillSign * delta >= 0;
   }
 
   // ===== LAKE: Circle, grass outside =====
   private isInsideLake(row: number, col: number): boolean {
+    // Use SAME circle as line tracing
     const centerRow = this.mapRows / 2;
     const centerCol = this.mapCols / 2;
     const distance = calculateDistanceToPoint(row, col, centerRow, centerCol);
     const radius = Math.min(this.mapRows, this.mapCols) * 0.35;
-    const noise = this.noise.noise2D(row * 0.08, col * 0.08) * 3;
 
-    return distance < radius + noise;
+    return distance < radius;
   }
 
   // ===== ISLAND: Circle, grass inside =====
   private isInsideIsland(row: number, col: number): boolean {
+    // Use SAME circle as line tracing
     const centerRow = this.mapRows / 2;
     const centerCol = this.mapCols / 2;
     const distance = calculateDistanceToPoint(row, col, centerRow, centerCol);
     const radius = Math.min(this.mapRows, this.mapCols) * 0.35;
-    const noise = this.noise.noise2D(row * 0.08, col * 0.08) * 3;
 
-    return distance < radius + noise;
+    return distance < radius;
   }
 
-  // ===== COVE: Crescent, grass outside =====
-  private coveCenter: { row: number; col: number } | null = null;
-  private coveOuterRadius: number = 0;
-  private coveInnerRadius: number = 0;
-
-  private initializeCove(): void {
-    // Try different positions until grass is majority
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const centerRow = this.mapRows * (0.2 + this.random.next() * 0.6);
-      const centerCol = this.mapCols * (0.2 + this.random.next() * 0.6);
-      const outerRadius = Math.min(this.mapRows, this.mapCols) * (0.3 + this.random.next() * 0.2);
-      const innerRadius = outerRadius * 0.6;
-
-      // Count grass vs water
-      let grassCount = 0;
-      let waterCount = 0;
-
-      for (let r = 0; r < this.mapRows; r++) {
-        for (let c = 0; c < this.mapCols; c++) {
-          const dist = calculateDistanceToPoint(r, c, centerRow, centerCol);
-          const angle = Math.atan2(r - centerRow, c - centerCol);
-          const isInCrescent = dist < outerRadius && dist > innerRadius &&
-                               angle > -Math.PI / 2 && angle < Math.PI / 2;
-
-          if (isInCrescent) waterCount++;
-          else grassCount++;
-        }
-      }
-
-      if (grassCount > waterCount) {
-        this.coveCenter = { row: centerRow, col: centerCol };
-        this.coveOuterRadius = outerRadius;
-        this.coveInnerRadius = innerRadius;
-        return;
-      }
-    }
-
-    // Fallback if no good position found
-    this.coveCenter = { row: this.mapRows * 0.25, col: this.mapCols * 0.75 };
-    this.coveOuterRadius = Math.min(this.mapRows, this.mapCols) * 0.35;
-    this.coveInnerRadius = this.coveOuterRadius * 0.6;
-  }
-
+  // ===== COVE: Circle intersecting 2 edges, grass outside =====
   private isInsideCove(row: number, col: number): boolean {
-    if (!this.coveCenter) {
-      this.initializeCove();
-    }
+    // Use SAME circle as line tracing
+    const centerRow = this.coveCenter!.row;
+    const centerCol = this.coveCenter!.col;
+    const distance = calculateDistanceToPoint(row, col, centerRow, centerCol);
+    const radius = this.coveOuterRadius;
 
-    const distance = calculateDistanceToPoint(row, col, this.coveCenter!.row, this.coveCenter!.col);
-    const angle = Math.atan2(row - this.coveCenter!.row, col - this.coveCenter!.col);
-    const noise = this.noise.noise2D(row * 0.08, col * 0.08) * 2;
-
-    return distance < this.coveOuterRadius + noise &&
-           distance > this.coveInnerRadius - noise &&
-           angle > -Math.PI / 2 && angle < Math.PI / 2;
+    return distance < radius;
   }
 
   // ===== PENINSULA: Two curved lines, grass between =====
