@@ -21,7 +21,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
           <div style={styles.loaderBar} />
         </div>
         <p style={styles.tapHint}>Tap to continue</p>
-        <p style={styles.versionName}>v. Silver Tide</p>
+        <p style={styles.versionName}>v. Crystal Wave</p>
       </div>
     </div>
   );
