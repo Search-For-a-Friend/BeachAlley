@@ -8,6 +8,26 @@ import { CameraState } from '../types/canvas';
 import { TerrainMap } from '../types/environment';
 import { CANVAS_CONFIG, MAP_CONFIG } from './config';
 
+/** Find a sand tile to center the view on; prefer one closest to map center. */
+function findSandTileForCenter(terrainMap: TerrainMap): { row: number; col: number } | null {
+  const centerRow = terrainMap.height / 2;
+  const centerCol = terrainMap.width / 2;
+  let best: { row: number; col: number } | null = null;
+  let bestDist = Infinity;
+
+  terrainMap.tiles.forEach((type, key) => {
+    if (type !== 'sand') return;
+    const [row, col] = key.split(',').map(Number);
+    const dist = (row - centerRow) ** 2 + (col - centerCol) ** 2;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = { row, col };
+    }
+  });
+
+  return best;
+}
+
 export interface InteractiveCanvasProps {
   terrainMap: TerrainMap;
   width?: number;
@@ -21,20 +41,26 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [canvasSize, setCanvasSize] = useState({ width: width || 800, height: height || 600 });
+  const initialSize = { width: width || 800, height: height || 600 };
+  const [canvasSize, setCanvasSize] = useState(initialSize);
   const [cameraSystem] = useState<CameraSystem>(() => {
-    // Start at bottom-left corner of the map (tile ROWS-1, 0)
-    const bottomLeftRow = MAP_CONFIG.ROWS - 1;
-    const bottomLeftCol = 0;
-    const worldX = (bottomLeftCol - bottomLeftRow) * (CANVAS_CONFIG.TILE_WIDTH / 2);
-    const worldY = (bottomLeftCol + bottomLeftRow) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
-    
+    const zoom = CANVAS_CONFIG.INITIAL_ZOOM;
+    const w = initialSize.width;
+    const h = initialSize.height;
+
+    const sandTile = findSandTileForCenter(terrainMap);
+    const row = sandTile?.row ?? MAP_CONFIG.ROWS / 2;
+    const col = sandTile?.col ?? MAP_CONFIG.COLS / 2;
+
+    const worldX = (col - row) * (CANVAS_CONFIG.TILE_WIDTH / 2);
+    const worldY = (col + row) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
+
     const initialCamera: CameraState = {
-      worldX: worldX - 100,
-      worldY: worldY - 200,
-      zoom: CANVAS_CONFIG.INITIAL_ZOOM,
+      worldX: worldX - w / (2 * zoom),
+      worldY: worldY - h / (2 * zoom),
+      zoom,
     };
-    return new CameraSystem(initialCamera, canvasSize.width, canvasSize.height);
+    return new CameraSystem(initialCamera, w, h);
   });
   const [tileLoader] = useState<TileLoader>(() => new TileLoader(cameraSystem, terrainMap));
   const inputHandlerRef = useRef<InputHandler | null>(null);
