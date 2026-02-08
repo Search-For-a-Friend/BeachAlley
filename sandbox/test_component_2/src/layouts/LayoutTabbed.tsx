@@ -45,6 +45,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   const [drawerContent, setDrawerContent] = useState<DrawerType>(null);
   const [previousDrawer, setPreviousDrawer] = useState<DrawerType>(null);
   const [drawerTransitionDirection, setDrawerTransitionDirection] = useState<'left' | 'right' | null>(null);
+  const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
 
   // Group interaction state
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
@@ -52,6 +53,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
 
   const tabOrder: Tab[] = ['game', 'build', 'manage'];
   const drawerOrder: DrawerType[] = ['statistics', 'finance', 'staff', 'groups', 'settings', 'credits'];
+
+  const isActionBarCompact = Boolean(openDrawer || selectedBuilding);
   
   const getTabIndex = (tab: Tab | null): number => {
     if (!tab) return -1;
@@ -143,6 +146,10 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
     setHoveredGroupId(groupId);
   };
 
+  const toggleDrawerExpansion = () => {
+    setIsDrawerExpanded(!isDrawerExpanded);
+  };
+
   // Update action bar visibility based on both activeTab and selectedBuilding
   React.useEffect(() => {
     const shouldBeVisible = activeTab !== null && !selectedBuilding;
@@ -190,16 +197,15 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
     switch (tab) {
       case 'game':
         return (
-          <div style={styles.actionScroll}>
-            <Card icon="💾" />
-            <Card icon="⏸️" />
-            <Card icon="⏩" />
-            <Card icon="⏭️" />
+          <div style={{ ...styles.actionScroll, ...(isActionBarCompact ? styles.actionScrollCompact : {}) }}>
+            <Card icon="💾" compact={isActionBarCompact} />
+            <Card icon="⏸️" compact={isActionBarCompact} />
+            <Card icon="⏩" compact={isActionBarCompact} />
           </div>
         );
       case 'build':
         return (
-          <div style={styles.actionScroll}>
+          <div style={{ ...styles.actionScroll, ...(isActionBarCompact ? styles.actionScrollCompact : {}) }}>
             {buildings.map((building) => (
               <Card
                 key={building.name}
@@ -207,35 +213,54 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
                 price={building.price}
                 active={selectedBuilding?.name === building.name}
                 onClick={() => handleBuildingSelect(building)}
+                compact={isActionBarCompact}
               />
             ))}
           </div>
         );
       case 'manage':
         return (
-          <div style={styles.actionScroll}>
+          <div style={{ ...styles.actionScroll, ...(isActionBarCompact ? styles.actionScrollCompact : {}) }}>
             <Card 
               icon="📊" 
               active={openDrawer === 'statistics'}
-              onClick={() => toggleDrawer('statistics')} 
+              onClick={() => toggleDrawer('statistics')}
+              compact={isActionBarCompact}
             />
             <Card 
               icon="💰" 
               active={openDrawer === 'finance'}
-              onClick={() => toggleDrawer('finance')} 
+              onClick={() => toggleDrawer('finance')}
+              compact={isActionBarCompact}
             />
             <Card 
               icon="💼" 
               active={openDrawer === 'staff'}
-              onClick={() => toggleDrawer('staff')} 
+              onClick={() => toggleDrawer('staff')}
+              compact={isActionBarCompact}
             />
             <Card 
               icon="👥" 
               active={openDrawer === 'groups'}
-              onClick={() => toggleDrawer('groups')} 
+              onClick={() => toggleDrawer('groups')}
+              compact={isActionBarCompact}
+            />
+            <Card 
+              icon="⚙️" 
+              active={openDrawer === 'settings'}
+              onClick={() => toggleDrawer('settings')}
+              compact={isActionBarCompact}
+            />
+            <Card 
+              icon="👥" 
+              active={openDrawer === 'credits'}
+              onClick={() => toggleDrawer('credits')}
+              compact={isActionBarCompact}
             />
           </div>
         );
+      default:
+        return null;
     }
   };
 
@@ -286,6 +311,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
         {previousTab && transitionDirection && animationsEnabled && (
           <div style={{
             ...styles.actionBarOverlay,
+            ...(isActionBarCompact ? styles.actionBarOverlayCompact : {}),
             animation: 'slideOutTo' + (transitionDirection === 'right' ? 'Left' : 'Right') + ' 0.3s ease-out',
             pointerEvents: 'none',
           }}>
@@ -296,6 +322,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
         {/* Action Bar Overlay - Current/new tab sliding in */}
         <div style={{
           ...styles.actionBarOverlay,
+          ...(isActionBarCompact ? styles.actionBarOverlayCompact : {}),
           transform: isActionBarVisible ? 'translateY(0)' : 'translateY(150%)',
           opacity: isActionBarVisible ? 1 : 0,
           pointerEvents: isActionBarVisible ? 'auto' : 'none',
@@ -311,6 +338,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
         {previousDrawer && drawerTransitionDirection && animationsEnabled && (
           <div style={{
             ...styles.drawerOverlay,
+            top: isDrawerExpanded ? '5px' : '40%',
             animation: 'slideOutTo' + (drawerTransitionDirection === 'right' ? 'Left' : 'Right') + ' 0.3s ease-out',
             pointerEvents: 'none',
           }}>
@@ -324,6 +352,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               gameState={gameState}
               selectedGroup={selectedGroupId && gameState ? gameState.groups.find(g => g.id === selectedGroupId) || null : null}
               setSelectedGroupId={setSelectedGroupId}
+              isDrawerExpanded={isDrawerExpanded}
+              toggleDrawerExpansion={toggleDrawerExpansion}
             />
           </div>
         )}
@@ -331,13 +361,16 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
         {/* Drawer Overlay - Current/new drawer sliding in */}
         <div style={{
           ...styles.drawerOverlay,
+          top: isDrawerExpanded ? '5px' : '40%',
           transform: isDrawerVisible ? 'translateY(0)' : 'translateY(100%)',
           opacity: isDrawerVisible ? 1 : 0,
           pointerEvents: isDrawerVisible ? 'auto' : 'none',
           animation: (animationsEnabled && drawerTransitionDirection)
             ? 'slideInFrom' + (drawerTransitionDirection === 'right' ? 'Right' : 'Left') + ' 0.3s ease-out'
             : 'none',
-          transition: animationsEnabled ? 'transform 0.3s ease-out, opacity 0.3s ease-out' : 'none',
+          transition: animationsEnabled
+            ? 'transform 0.3s ease-out, opacity 0.3s ease-out, top 0.3s ease-out'
+            : 'none',
         }}>
           {drawerContent && (
             <DrawerContent 
@@ -350,6 +383,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               gameState={gameState}
               selectedGroup={selectedGroupId && gameState ? gameState.groups.find(g => g.id === selectedGroupId) || null : null}
               setSelectedGroupId={setSelectedGroupId}
+              isDrawerExpanded={isDrawerExpanded}
+              toggleDrawerExpansion={toggleDrawerExpansion}
             />
           )}
         </div>
@@ -529,16 +564,22 @@ const Card: React.FC<{
   price?: string;
   active?: boolean;
   onClick?: () => void;
-}> = ({ icon, price, active, onClick }) => (
+  compact?: boolean;
+}> = ({ icon, price, active, onClick, compact }) => (
   <button
     style={{
       ...styles.card,
       ...(active ? styles.cardActive : {}),
+      ...(compact ? styles.cardCompact : {}),
     }}
     onClick={onClick}
   >
-    <div style={styles.cardIcon}>{icon}</div>
-    {price && <div style={styles.cardPrice}>{price}</div>}
+    <div style={{ ...styles.cardIcon, ...(compact ? styles.cardIconCompact : {}) }}>{icon}</div>
+    {price && (
+      <div style={{ ...styles.cardPrice, ...(compact ? styles.cardPriceCompact : {}) }}>
+        {price}
+      </div>
+    )}
   </button>
 );
 
@@ -553,7 +594,9 @@ const DrawerContent: React.FC<{
   gameState?: GameState | null;
   selectedGroup?: any;
   setSelectedGroupId?: (id: string | null) => void;
-}> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId }) => {
+  isDrawerExpanded?: boolean;
+  toggleDrawerExpansion?: () => void;
+}> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId, isDrawerExpanded, toggleDrawerExpansion }) => {
   const getContent = () => {
     switch (type) {
       case 'statistics':
@@ -740,6 +783,9 @@ const DrawerContent: React.FC<{
           <span style={styles.drawerIcon}>{icon}</span>
           <span>{title}</span>
         </div>
+        <button style={styles.drawerExpand} onClick={toggleDrawerExpansion}>
+          {isDrawerExpanded ? '⬇' : '⬆'}
+        </button>
         <button style={styles.drawerClose} onClick={onClose}>
           ✕
         </button>
@@ -885,6 +931,12 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'transform 0.3s ease-out, opacity 0.3s ease-out',
     overflow: 'hidden',
   },
+  actionBarOverlayCompact: {
+    bottom: '5px',
+    left: '5px',
+    right: '5px',
+    padding: '6px',
+  },
   tabContentContainer: {
     position: 'relative',
     width: '100%',
@@ -909,13 +961,15 @@ const styles: Record<string, React.CSSProperties> = {
     scrollbarWidth: 'none',
     msOverflowStyle: 'none',
   },
+  actionScrollCompact: {
+    gap: '6px',
+  },
   drawerOverlay: {
     position: 'absolute',
-    bottom: '130px',
+    top: '40%',
+    bottom: '75px',
     left: '15px',
     right: '15px',
-    maxHeight: '-webkit-fill-available',
-    marginTop: '5px',
     background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
     borderRadius: '15px',
     border: '2px solid rgba(0, 255, 255, 0.3)',
@@ -923,6 +977,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     overflow: 'hidden',
     boxShadow: '0 -4px 30px rgba(0, 255, 255, 0.3)',
+    transition: 'all 0.3s ease',
     zIndex: 12,
   },
   contextualColumn: {
@@ -1067,6 +1122,13 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     color: '#fff',
   },
+  cardCompact: {
+    gap: '4px',
+    minWidth: '50px',
+    width: '50px',
+    height: '50px',
+    padding: '6px',
+  },
   cardActive: {
     background: 'rgba(0, 255, 255, 0.2)',
     border: '2px solid #00ffff',
@@ -1075,10 +1137,16 @@ const styles: Record<string, React.CSSProperties> = {
   cardIcon: {
     fontSize: '2.5rem',
   },
+  cardIconCompact: {
+    fontSize: '1.6rem',
+  },
   cardPrice: {
     fontSize: '0.75rem',
     color: '#FFD93D',
     fontWeight: 'bold',
+  },
+  cardPriceCompact: {
+    fontSize: '0.6rem',
   },
   tabBar: {
     display: 'flex',
@@ -1154,6 +1222,23 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '50%',
     color: '#FF0080',
     fontSize: '1.1rem',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+  },
+  drawerExpand: {
+    position: 'absolute',
+    top: '12px',
+    right: '50px',
+    width: '32px',
+    height: '32px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(0, 255, 255, 0.2)',
+    border: '2px solid rgba(0, 255, 255, 0.5)',
+    borderRadius: '50%',
+    color: '#00ffff',
+    fontSize: '1rem',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
   },
