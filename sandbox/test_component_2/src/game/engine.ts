@@ -107,6 +107,7 @@ export class GameEngine {
   private establishmentGridPositions: Map<string, { gridX: number; gridY: number }> = new Map();
   private gridManager: GridManager;
   private pathfinder: Pathfinder;
+  private terrainMap?: TerrainMap;
   /** Spawn tile centers (x, y) for exit and spawn. */
   private spawnTiles: Vector2[] = [];
 
@@ -116,6 +117,7 @@ export class GameEngine {
     const height = terrainMap ? terrainMap.height : 20;
     this.gridManager = new GridManager(width, height);
     this.pathfinder = new Pathfinder();
+    this.terrainMap = terrainMap;
     this.state = terrainMap ? this.createInitialStateFromTerrain(terrainMap) : this.createInitialStateFallback();
   }
 
@@ -263,6 +265,83 @@ export class GameEngine {
     return this.gridManager;
   }
 
+  tryBuildEstablishment(
+    row: number,
+    col: number,
+    _building: { icon: string; name: string; price: string }
+  ): boolean {
+    if (!this.terrainMap) return false;
+
+    if (row < 0 || col < 0 || row >= this.terrainMap.height || col >= this.terrainMap.width) {
+      return false;
+    }
+
+    const terrainType = this.terrainMap.tiles.get(tileKey(row, col)) || 'water';
+    if (terrainType !== 'grass') {
+      return false;
+    }
+
+    const existingTile = this.gridManager.getTile(col, row);
+    if (existingTile?.type === 'building' || existingTile?.type === 'entrance') {
+      return false;
+    }
+
+    const isOccupied = this.state.establishments.some((e) => {
+      if (!e.gridPosition) return false;
+      return Math.floor(e.gridPosition.x) === col && Math.floor(e.gridPosition.y) === row;
+    });
+    if (isOccupied) {
+      return false;
+    }
+
+    const gridX = col;
+    const gridY = row;
+    const worldPos = this.gridToWorld(gridX + 0.5, gridY + 0.5);
+
+    const est = createEstablishment(worldPos, {
+      maxCapacity: 4,
+      attractionRadius: 25,
+      attractionPower: 100,
+      serviceTime: this.config.defaultServiceTime,
+    });
+
+    est.gridPosition = { x: gridX, y: gridY };
+
+    const neighbors = [
+      { r: row - 1, c: col },
+      { r: row, c: col - 1 },
+      { r: row + 1, c: col },
+      { r: row, c: col + 1 },
+    ];
+
+    let entranceRow = row;
+    let entranceCol = col;
+    let foundEntrance = false;
+    for (const n of neighbors) {
+      if (n.r < 0 || n.c < 0 || n.r >= this.terrainMap.height || n.c >= this.terrainMap.width) continue;
+      if (this.gridManager.isWalkable(n.c, n.r)) {
+        entranceRow = n.r;
+        entranceCol = n.c;
+        foundEntrance = true;
+        break;
+      }
+    }
+
+    if (!foundEntrance) {
+      return false;
+    }
+
+    est.entrance = { x: entranceCol + 0.5, y: entranceRow + 0.5 };
+    est.isOpen = true;
+
+    this.state.establishments.push(est);
+    this.establishmentGridPositions.set(est.id, { gridX, gridY });
+    this.gridManager.markEstablishmentFootprint(est, est.entrance);
+
+    this.emit({ type: 'STATE_CHANGED', establishmentId: est.id, from: 'deserted', to: est.state as EstablishmentState });
+    return true;
+  }
+
   togglePause(): void {
     this.state.isPaused = !this.state.isPaused;
   }
@@ -381,7 +460,6 @@ export class GameEngine {
 
   private movementPhase(deltaTime: number): void {
     const dt = deltaTime / 1000;
-    const dims = this.gridManager.getDimensions();
     for (const group of this.state.groups) {
       if (!['seeking', 'wandering', 'leaving'].includes(group.state)) continue;
       const prevPos = { ...group.position };
@@ -485,11 +563,10 @@ export class GameEngine {
   }
 
   private cleanupPhase(): void {
-    const dims = this.gridManager.getDimensions();
     const toRemove: string[] = [];
     for (const group of this.state.groups) {
       if (group.state === 'despawned') toRemove.push(group.id), this.state.stats.totalGroupsDespawned++, this.emit({ type: 'GROUP_DESPAWNED', groupId: group.id });
-      if (group.state === 'leaving' && isOutOfBounds(group, dims.width, dims.height)) toRemove.push(group.id), this.state.stats.totalGroupsDespawned++, this.emit({ type: 'GROUP_DESPAWNED', groupId: group.id });
+      if (group.state === 'leaving' && isOutOfBounds(group, this.gridManager.getDimensions().width, this.gridManager.getDimensions().height)) toRemove.push(group.id), this.state.stats.totalGroupsDespawned++, this.emit({ type: 'GROUP_DESPAWNED', groupId: group.id });
     }
     this.state.groups = this.state.groups.filter(g => !toRemove.includes(g.id));
   }

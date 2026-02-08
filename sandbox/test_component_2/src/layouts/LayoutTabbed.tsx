@@ -4,6 +4,7 @@ import { TerrainMap } from '../types/environment';
 import { GameState } from '../types';
 import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
 import { GroupDetailsPanel } from '../components/GroupDetailsPanel';
+import { EstablishmentDetailsPanel } from '../components/EstablishmentDetailsPanel';
 
 interface LayoutTabbedProps {
   onBack: () => void;
@@ -13,10 +14,11 @@ interface LayoutTabbedProps {
   terrainMap: TerrainMap;
   gameState?: GameState | null;
   gridManager?: any;
+  onTryBuild?: (row: number, col: number, building: { icon: string; name: string; price: string }) => boolean;
 }
 
 type Tab = 'game' | 'build' | 'manage';
-type DrawerType = 'statistics' | 'finance' | 'staff' | 'groups' | 'settings' | 'credits' | null;
+type DrawerType = 'statistics' | 'finance' | 'staff' | 'groups' | 'establishments' | 'settings' | 'credits' | null;
 
 interface BuildingInfo {
   icon: string;
@@ -31,7 +33,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   onToggleAnimations,
   terrainMap,
   gameState,
-  gridManager
+  gridManager,
+  onTryBuild
 }) => {
   const [activeTab, setActiveTab] = useState<Tab | null>('game');
   const [openDrawer, setOpenDrawer] = useState<DrawerType>(null);
@@ -51,8 +54,15 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
+  // Establishment interaction state
+  const [hoveredEstablishmentId, setHoveredEstablishmentId] = useState<string | null>(null);
+  const [selectedEstablishmentId, setSelectedEstablishmentId] = useState<string | null>(null);
+
+  // Build mode state
+  const [selectionTile, setSelectionTile] = useState<{ row: number; col: number } | null>(null);
+
   const tabOrder: Tab[] = ['game', 'build', 'manage'];
-  const drawerOrder: DrawerType[] = ['statistics', 'finance', 'staff', 'groups', 'settings', 'credits'];
+  const drawerOrder: DrawerType[] = ['statistics', 'finance', 'staff', 'groups', 'establishments', 'settings', 'credits'];
 
   const isActionBarCompact = Boolean(openDrawer || selectedBuilding);
   
@@ -146,8 +156,28 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
     setHoveredGroupId(groupId);
   };
 
+  // Establishment interaction handlers
+  const handleEstablishmentClick = (establishmentId: string) => {
+    if (selectedEstablishmentId === establishmentId) {
+      setSelectedEstablishmentId(null);
+    } else {
+      setSelectedEstablishmentId(establishmentId);
+      setOpenDrawer('establishments');
+    }
+  };
+
+  const handleEstablishmentHover = (establishmentId: string | null) => {
+    setHoveredEstablishmentId(establishmentId);
+  };
+
   const toggleDrawerExpansion = () => {
     setIsDrawerExpanded(!isDrawerExpanded);
+  };
+
+  const handleTryBuild = () => {
+    if (!selectedBuilding) return;
+    if (!selectionTile) return;
+    onTryBuild?.(selectionTile.row, selectionTile.col, selectedBuilding);
   };
 
   // Update action bar visibility based on both activeTab and selectedBuilding
@@ -246,6 +276,12 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               compact={isActionBarCompact}
             />
             <Card 
+              icon="🏠" 
+              active={openDrawer === 'establishments'}
+              onClick={() => toggleDrawer('establishments')}
+              compact={isActionBarCompact}
+            />
+            <Card 
               icon="⚙️" 
               active={openDrawer === 'settings'}
               onClick={() => toggleDrawer('settings')}
@@ -277,7 +313,13 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           selectedGroupId={selectedGroupId}
           onGroupClick={handleGroupClick}
           onGroupHover={handleGroupHover}
+          hoveredEstablishmentId={hoveredEstablishmentId}
+          selectedEstablishmentId={selectedEstablishmentId}
+          onEstablishmentClick={handleEstablishmentClick}
+          onEstablishmentHover={handleEstablishmentHover}
           gridManager={gridManager}
+          buildModeEnabled={!!selectedBuilding}
+          onSelectionTileChange={setSelectionTile}
         />
         
         {/* Contextual Column (for selected building) */}
@@ -301,7 +343,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           
           {/* Action Buttons */}
           <div style={styles.contextualBody}>
-            <button style={styles.contextualButton}>🏗️</button>
+            <button style={styles.contextualButton} onClick={handleTryBuild}>🏗️</button>
             <button style={styles.contextualButton}>🔄</button>
             <button style={styles.contextualButton}>🎨</button>
           </div>
@@ -352,6 +394,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               gameState={gameState}
               selectedGroup={selectedGroupId && gameState ? gameState.groups.find(g => g.id === selectedGroupId) || null : null}
               setSelectedGroupId={setSelectedGroupId}
+              selectedEstablishment={selectedEstablishmentId && gameState ? gameState.establishments.find(e => e.id === selectedEstablishmentId) || null : null}
+              setSelectedEstablishmentId={setSelectedEstablishmentId}
               isDrawerExpanded={isDrawerExpanded}
               toggleDrawerExpansion={toggleDrawerExpansion}
             />
@@ -383,6 +427,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               gameState={gameState}
               selectedGroup={selectedGroupId && gameState ? gameState.groups.find(g => g.id === selectedGroupId) || null : null}
               setSelectedGroupId={setSelectedGroupId}
+              selectedEstablishment={selectedEstablishmentId && gameState ? gameState.establishments.find(e => e.id === selectedEstablishmentId) || null : null}
+              setSelectedEstablishmentId={setSelectedEstablishmentId}
               isDrawerExpanded={isDrawerExpanded}
               toggleDrawerExpansion={toggleDrawerExpansion}
             />
@@ -594,9 +640,11 @@ const DrawerContent: React.FC<{
   gameState?: GameState | null;
   selectedGroup?: any;
   setSelectedGroupId?: (id: string | null) => void;
+  selectedEstablishment?: any;
+  setSelectedEstablishmentId?: (id: string | null) => void;
   isDrawerExpanded?: boolean;
   toggleDrawerExpansion?: () => void;
-}> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId, isDrawerExpanded, toggleDrawerExpansion }) => {
+}> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId, selectedEstablishment, setSelectedEstablishmentId, isDrawerExpanded, toggleDrawerExpansion }) => {
   const getContent = () => {
     switch (type) {
       case 'statistics':
@@ -678,6 +726,32 @@ const DrawerContent: React.FC<{
               <div style={styles.financeItem}>
                 <span style={styles.financeLabel}>Time on Beach</span>
                 <span style={styles.financeValue}>2.5h</span>
+              </div>
+            </div>
+          ),
+        };
+      case 'establishments':
+        return {
+          icon: '🏠',
+          title: 'Establishment Management',
+          content: (
+            <div style={styles.drawerContent}>
+              {selectedEstablishment && (
+                <>
+                  <EstablishmentDetailsPanel
+                    establishment={selectedEstablishment}
+                    onClose={() => setSelectedEstablishmentId && setSelectedEstablishmentId(null)}
+                  />
+                  <div style={styles.divider} />
+                </>
+              )}
+              <div style={styles.financeItem}>
+                <span style={styles.financeLabel}>Total Establishments</span>
+                <span style={styles.financeValue}>{gameState?.establishments.length || 0}</span>
+              </div>
+              <div style={styles.financeItem}>
+                <span style={styles.financeLabel}>Open</span>
+                <span style={styles.financeValue}>{gameState?.establishments.filter((e: any) => e.isOpen).length || 0}</span>
               </div>
             </div>
           ),

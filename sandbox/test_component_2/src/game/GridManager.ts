@@ -20,7 +20,7 @@ export class GridManager {
     this.initializeEmpty();
   }
 
-  private initializeEmpty(): void {
+  initializeEmpty(): void {
     for (let y = 0; y < this.height; y++) {
       this.grid[y] = [];
       for (let x = 0; x < this.width; x++) {

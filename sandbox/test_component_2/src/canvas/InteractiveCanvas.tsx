@@ -108,7 +108,13 @@ export interface InteractiveCanvasProps {
   selectedGroupId?: string | null;
   onGroupClick?: (groupId: string) => void;
   onGroupHover?: (groupId: string | null) => void;
+  hoveredEstablishmentId?: string | null;
+  selectedEstablishmentId?: string | null;
+  onEstablishmentClick?: (establishmentId: string) => void;
+  onEstablishmentHover?: (establishmentId: string | null) => void;
   gridManager?: any; // GridManager type from game engine
+  buildModeEnabled?: boolean;
+  onSelectionTileChange?: (tile: { row: number; col: number } | null) => void;
 }
 
 export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
@@ -120,7 +126,13 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   selectedGroupId,
   onGroupClick,
   onGroupHover,
+  hoveredEstablishmentId,
+  selectedEstablishmentId,
+  onEstablishmentClick,
+  onEstablishmentHover,
   gridManager,
+  buildModeEnabled,
+  onSelectionTileChange,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -146,6 +158,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [tileLoader] = useState<TileLoader>(() => new TileLoader(cameraSystem, terrainMap));
   const inputHandlerRef = useRef<InputHandler | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const lastSelectionKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -206,6 +219,46 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         ctx.fill();
         ctx.stroke();
       });
+
+      // Build mode: compute the selection tile at viewport center and render highlight
+      if (buildModeEnabled) {
+        const centerScreenX = canvasSize.width / 2;
+        const centerScreenY = canvasSize.height / 2;
+        const { worldX: centerWorldX, worldY: centerWorldY } = cameraSystem.screenToWorld(centerScreenX, centerScreenY);
+        const centerTile = cameraSystem.worldToTile(centerWorldX, centerWorldY);
+
+        // Clamp to map bounds
+        const clampedRow = Math.max(0, Math.min(terrainMap.height - 1, centerTile.row));
+        const clampedCol = Math.max(0, Math.min(terrainMap.width - 1, centerTile.col));
+        const selectionKey = `${clampedRow},${clampedCol}`;
+
+        if (selectionKey !== lastSelectionKeyRef.current) {
+          lastSelectionKeyRef.current = selectionKey;
+          onSelectionTileChange?.({ row: clampedRow, col: clampedCol });
+        }
+
+        const { worldX, worldY } = cameraSystem.tileToWorld(clampedRow, clampedCol);
+        const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 255, 255, 0.18)';
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(screenX, screenY);
+        ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
+        ctx.lineTo(screenX, screenY + scaledH);
+        ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        if (lastSelectionKeyRef.current !== null) {
+          lastSelectionKeyRef.current = null;
+          onSelectionTileChange?.(null);
+        }
+      }
 
       if (gameState) {
         // Draw special tile highlights first (underneath other elements)
@@ -268,11 +321,22 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           const col = est.gridPosition.x;
           const { worldX, worldY } = cameraSystem.tileToWorld(row, col);
           const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+
+          const isHovered = hoveredEstablishmentId === est.id;
+          const isSelected = selectedEstablishmentId === est.id;
           
           // Draw establishment building
           ctx.fillStyle = '#8B7355';
-          ctx.strokeStyle = '#654321';
-          ctx.lineWidth = 2;
+          if (isSelected) {
+            ctx.strokeStyle = '#00ffff';
+            ctx.lineWidth = 4;
+          } else if (isHovered) {
+            ctx.strokeStyle = '#ff0080';
+            ctx.lineWidth = 3;
+          } else {
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 2;
+          }
           ctx.beginPath();
           ctx.moveTo(screenX, screenY);
           ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
@@ -281,6 +345,22 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
+
+          // Add glow effect for selected/hovered
+          if (isSelected || isHovered) {
+            ctx.save();
+            ctx.shadowColor = isSelected ? '#00ffff' : '#ff0080';
+            ctx.shadowBlur = 15;
+            ctx.globalAlpha = 0.55;
+            ctx.beginPath();
+            ctx.moveTo(screenX, screenY);
+            ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
+            ctx.lineTo(screenX, screenY + scaledH);
+            ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+          }
           
           // Draw guest count on top
           drawOccupancyBar(ctx, est, screenX, screenY - scaledH / 2 - 10);
@@ -369,30 +449,71 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [cameraSystem, tileLoader, canvasSize, gameState, hoveredGroupId, selectedGroupId]);
+  }, [
+    cameraSystem,
+    tileLoader,
+    canvasSize,
+    gameState,
+    hoveredGroupId,
+    selectedGroupId,
+    hoveredEstablishmentId,
+    selectedEstablishmentId,
+    gridManager,
+    buildModeEnabled,
+    onSelectionTileChange,
+    terrainMap,
+  ]);
 
   // Mouse interaction handlers - now handled by InputHandler
   const handleElementClick = (x: number, y: number) => {
-    if (!onGroupClick || !gameState) return;
-    
+    if (!gameState) return;
+
+    // Check if click is over any establishment
+    if (onEstablishmentClick) {
+      for (const est of gameState.establishments) {
+        if (!est.gridPosition) continue;
+        const row = est.gridPosition.y;
+        const col = est.gridPosition.x;
+        const { worldX, worldY } = cameraSystem.tileToWorld(row, col);
+        const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+
+        const zoom = cameraSystem.getState().zoom;
+        const scaledW = CANVAS_CONFIG.TILE_WIDTH * zoom;
+        const scaledH = CANVAS_CONFIG.TILE_HEIGHT * zoom;
+
+        const dx = x - screenX;
+        const dy = y - (screenY + scaledH / 2);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Establishments are drawn as a tile-diamond; approximate with circle radius
+        const radius = Math.max(scaledW, scaledH) * 0.5;
+        if (distance <= radius) {
+          onEstablishmentClick(est.id);
+          return;
+        }
+      }
+    }
+
     // Check if click is over any group
+    if (!onGroupClick) return;
+
     for (const group of gameState.groups) {
       if (group.state === 'visiting' || group.state === 'despawned') continue;
-      
+
       const col = group.position.x;
       const row = group.position.y;
       const worldX = (col - row) * (CANVAS_CONFIG.TILE_WIDTH / 2);
       const worldY = (col + row) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
       const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
-      
+
       const radius = 8 + group.size * 2;
       const zoom = cameraSystem.getState().zoom;
       const scaledH = CANVAS_CONFIG.TILE_HEIGHT * zoom;
-      
+
       const dx = x - screenX;
       const dy = y - (screenY + scaledH / 2);
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
+
       if (distance <= radius + 5) {
         onGroupClick(group.id);
         return;
@@ -401,36 +522,62 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   };
 
   const handleElementHover = (x: number, y: number) => {
-    if (!onGroupHover || !gameState) return;
-    
-    // Check if hover is over any group
+    if (!gameState) return;
+    if (!onGroupHover && !onEstablishmentHover) return;
+
+    let hoveredEstablishment: string | null = null;
+    if (onEstablishmentHover) {
+      for (const est of gameState.establishments) {
+        if (!est.gridPosition) continue;
+        const row = est.gridPosition.y;
+        const col = est.gridPosition.x;
+        const { worldX, worldY } = cameraSystem.tileToWorld(row, col);
+        const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+
+        const zoom = cameraSystem.getState().zoom;
+        const scaledW = CANVAS_CONFIG.TILE_WIDTH * zoom;
+        const scaledH = CANVAS_CONFIG.TILE_HEIGHT * zoom;
+
+        const dx = x - screenX;
+        const dy = y - (screenY + scaledH / 2);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        const radius = Math.max(scaledW, scaledH) * 0.5;
+        if (distance <= radius) {
+          hoveredEstablishment = est.id;
+          break;
+        }
+      }
+
+      onEstablishmentHover(hoveredEstablishment);
+    }
+
+    if (!onGroupHover) return;
+
     let hoveredGroup: string | null = null;
-    
     for (const group of gameState.groups) {
       if (group.state === 'visiting' || group.state === 'despawned') continue;
-      
+
       const col = group.position.x;
       const row = group.position.y;
       const worldX = (col - row) * (CANVAS_CONFIG.TILE_WIDTH / 2);
       const worldY = (col + row) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
       const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
-      
+
       const radius = 8 + group.size * 2;
       const zoom = cameraSystem.getState().zoom;
       const scaledH = CANVAS_CONFIG.TILE_HEIGHT * zoom;
-      
+
       const dx = x - screenX;
       const dy = y - (screenY + scaledH / 2);
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      if (distance <= radius + 5) { // Add small margin for easier hovering
+
+      if (distance <= radius + 5) {
         hoveredGroup = group.id;
-        console.log(`Hovering over group ${group.id}, has path: ${!!group.path}, path length: ${group.path?.length || 0}`);
         break;
       }
     }
-    
-    console.log(`Setting hovered group to: ${hoveredGroup}`);
+
     onGroupHover(hoveredGroup);
   };
 
@@ -444,7 +591,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       inputHandlerRef.current.setOnElementClick(handleElementClick);
       inputHandlerRef.current.setOnElementHover(handleElementHover);
     }
-  }, [inputHandlerRef.current, handleElementClick, handleElementHover]);
+  }, [handleElementClick, handleElementHover]);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -452,10 +599,10 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         ref={canvasRef}
         width={canvasSize.width}
         height={canvasSize.height}
-        style={{ 
-          display: 'block', 
-          cursor: hoveredGroupId ? 'pointer' : 'grab',
-          touchAction: 'none' 
+        style={{
+          display: 'block',
+          cursor: hoveredGroupId || hoveredEstablishmentId ? 'pointer' : 'grab',
+          touchAction: 'none',
         }}
       />
     </div>

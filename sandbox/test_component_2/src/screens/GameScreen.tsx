@@ -17,6 +17,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const [gameState, setGameState] = useState<GameState | null>(null);
   const engineRef = useRef<GameEngine | null>(null);
 
+  const handleTryBuild = (row: number, col: number, building: { icon: string; name: string; price: string }) => {
+    const engine = engineRef.current;
+    if (!engine) return false;
+    const ok = engine.tryBuildEstablishment(row, col, building);
+    setGameState(engine.getState());
+    return ok;
+  };
+
   useEffect(() => {
     const engine = new GameEngine(
       { canvasWidth: 800, canvasHeight: 600 },
@@ -47,9 +55,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     <div style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
       <LayoutTabbed
         onBack={onBackToMenu}
+        onChangeLayout={() => {}}
         terrainMap={terrainMap}
         gameState={gameState}
         gridManager={engineRef.current?.getGridManager()}
+        onTryBuild={handleTryBuild}
       />
     </div>
   );

@@ -43,6 +43,8 @@ export const EnvironmentSelector: React.FC<EnvironmentSelectorProps> = ({
               </button>
             ))}
           </div>
+        </div>
+      </div>
           <button
             style={{
               ...styles.startButton,
@@ -53,8 +55,6 @@ export const EnvironmentSelector: React.FC<EnvironmentSelectorProps> = ({
           >
             Start Game
           </button>
-        </div>
-      </div>
     </div>
   );
 };
@@ -147,7 +147,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   startButton: {
-    marginTop: '12px',
+    margin: '12px',
     padding: '12px',
     fontSize: 'clamp(0.95rem, 3.5vw, 1rem)',
     fontWeight: 'bold',
