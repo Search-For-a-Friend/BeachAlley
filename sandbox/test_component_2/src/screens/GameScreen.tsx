@@ -49,6 +49,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         onBack={onBackToMenu}
         terrainMap={terrainMap}
         gameState={gameState}
+        gridManager={engineRef.current?.getGridManager()}
       />
     </div>
   );

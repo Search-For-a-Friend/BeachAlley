@@ -3,12 +3,16 @@
 import { Vector2D } from '../types/canvas';
 
 export type InputCallback = (deltaX: number, deltaY: number) => void;
+export type ElementClickCallback = (x: number, y: number) => void;
+export type ElementHoverCallback = (x: number, y: number) => void;
 
 export class InputHandler {
   private canvas: HTMLCanvasElement;
   private isDragging = false;
   private lastPosition: Vector2D | null = null;
   private onDragCallback: InputCallback | null = null;
+  private onElementClickCallback: ElementClickCallback | null = null;
+  private onElementHoverCallback: ElementHoverCallback | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -17,6 +21,14 @@ export class InputHandler {
 
   setOnDrag(callback: InputCallback): void {
     this.onDragCallback = callback;
+  }
+
+  setOnElementClick(callback: ElementClickCallback): void {
+    this.onElementClickCallback = callback;
+  }
+
+  setOnElementHover(callback: ElementHoverCallback): void {
+    this.onElementHoverCallback = callback;
   }
 
   private setupEventListeners(): void {
@@ -32,16 +44,39 @@ export class InputHandler {
   }
 
   private handleMouseDown = (e: MouseEvent): void => {
+    // Check if this is a drag or click
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // If we have element callbacks, call them first
+    if (this.onElementClickCallback) {
+      this.onElementClickCallback(x, y);
+    }
+    
+    // Always start drag for camera movement
     this.isDragging = true;
     this.lastPosition = { x: e.clientX, y: e.clientY };
   };
 
   private handleMouseMove = (e: MouseEvent): void => {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Handle hover
+    if (this.onElementHoverCallback) {
+      this.onElementHoverCallback(x, y);
+    }
+    
+    // Handle drag
     if (!this.isDragging || !this.lastPosition) return;
     const currentPosition = { x: e.clientX, y: e.clientY };
     const deltaX = currentPosition.x - this.lastPosition.x;
     const deltaY = currentPosition.y - this.lastPosition.y;
-    if (this.onDragCallback) this.onDragCallback(-deltaX, -deltaY);
+    if (this.onDragCallback) {
+      this.onDragCallback(deltaX, deltaY);
+    }
     this.lastPosition = currentPosition;
   };
 
@@ -54,6 +89,15 @@ export class InputHandler {
     e.preventDefault();
     if (e.touches.length === 1) {
       const touch = e.touches[0];
+      const rect = this.canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      // Handle element click
+      if (this.onElementClickCallback) {
+        this.onElementClickCallback(x, y);
+      }
+      
       this.isDragging = true;
       this.lastPosition = { x: touch.clientX, y: touch.clientY };
     }
@@ -63,6 +107,16 @@ export class InputHandler {
     e.preventDefault();
     if (!this.isDragging || !this.lastPosition || e.touches.length !== 1) return;
     const touch = e.touches[0];
+    const rect = this.canvas.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    
+    // Handle hover
+    if (this.onElementHoverCallback) {
+      this.onElementHoverCallback(x, y);
+    }
+    
+    // Handle drag
     const currentPosition = { x: touch.clientX, y: touch.clientY };
     const deltaX = currentPosition.x - this.lastPosition.x;
     const deltaY = currentPosition.y - this.lastPosition.y;
