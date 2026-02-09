@@ -9,6 +9,74 @@ import { TerrainMap } from '../types/environment';
 import { GameState, Establishment } from '../types';
 import { CANVAS_CONFIG } from './config';
 
+type SpriteManifest = {
+  name: string;
+  type: string;
+  spritesheet: string;
+  frameWidth: number;
+  frameHeight: number;
+  anchorX: number;
+  anchorY: number;
+  animationSpeed: number;
+  states: Record<string, { row: number; frames: number }>;
+  variants?: Array<{ name: string; column: number }>;
+  category?: string;
+  groupSizeRange?: [number, number];
+};
+
+function stableStringHash(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash * 31 + input.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function getPeopleSpriteState(facingDirection: 'up' | 'down' | 'left' | 'right'): string {
+  switch (facingDirection) {
+    case 'up':
+      return 'look_up';
+    case 'down':
+      return 'look_down';
+    case 'left':
+    case 'right':
+    default:
+      return 'look_side';
+  }
+}
+
+function drawDiamondPath(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  scaledW: number,
+  scaledH: number
+): void {
+  ctx.beginPath();
+  ctx.moveTo(screenX, screenY);
+  ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
+  ctx.lineTo(screenX, screenY + scaledH);
+  ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+  ctx.closePath();
+}
+
+async function loadSpriteManifest(url: URL): Promise<SpriteManifest> {
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`Failed to load manifest: ${url.toString()}`);
+  }
+  return (await res.json()) as SpriteManifest;
+}
+
+async function loadImage(url: URL): Promise<HTMLImageElement> {
+  return await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = url.toString();
+  });
+}
+
 function drawPath(ctx: CanvasRenderingContext2D, path: any[], color: string, cameraSystem: CameraSystem): void {
   if (path.length < 2) return;
   
@@ -82,6 +150,38 @@ function drawOccupancyBar(ctx: CanvasRenderingContext2D, establishment: Establis
   );
 }
 
+function drawGroupStateIndicator(ctx: CanvasRenderingContext2D, group: any, x: number, y: number): void {
+  let stateIcon = '';
+  let iconColor = '#fff';
+
+  switch (group.state) {
+    case 'seeking':
+      stateIcon = '🎯';
+      iconColor = '#4ade80';
+      break;
+    case 'wandering':
+      stateIcon = '❓';
+      iconColor = '#facc15';
+      break;
+    case 'leaving':
+      stateIcon = '👋';
+      iconColor = '#f87171';
+      break;
+    case 'entering':
+      stateIcon = '🚪';
+      iconColor = '#60a5fa';
+      break;
+  }
+
+  if (stateIcon) {
+    ctx.fillStyle = iconColor;
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(stateIcon, x, y - 26);
+  }
+}
+
 function findSandTileForCenter(terrainMap: TerrainMap): { row: number; col: number } | null {
   const centerRow = terrainMap.height / 2;
   const centerCol = terrainMap.width / 2;
@@ -138,6 +238,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const initialSize = { width: width || 800, height: height || 600 };
   const [canvasSize, setCanvasSize] = useState(initialSize);
+  const [spritesReady, setSpritesReady] = useState(false);
   const mapDimensions = { rows: terrainMap.height, cols: terrainMap.width };
   const [cameraSystem] = useState<CameraSystem>(() => {
     const zoom = CANVAS_CONFIG.INITIAL_ZOOM;
@@ -159,6 +260,63 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const inputHandlerRef = useRef<InputHandler | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const lastSelectionKeyRef = useRef<string | null>(null);
+
+  const peopleSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
+  const smallGroupSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
+  const bigGroupSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
+  const houseSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
+
+  const groupAnimRef = useRef<Map<string, { frameIndex: number; lastFrameTime: number }>>(new Map());
+  const establishmentAnimRef = useRef<Map<string, { frameIndex: number; lastFrameTime: number }>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const individualManifestUrl = new URL('../../assets/sprites/people/individual/manifest.json', import.meta.url);
+        const smallGroupManifestUrl = new URL('../../assets/sprites/people/small_group/manifest.json', import.meta.url);
+        const bigGroupManifestUrl = new URL('../../assets/sprites/people/big_group/manifest.json', import.meta.url);
+        const houseManifestUrl = new URL('../../assets/sprites/establishments/house/manifest.json', import.meta.url);
+
+        const [individualManifest, smallGroupManifest, bigGroupManifest, houseManifest] = await Promise.all([
+          loadSpriteManifest(individualManifestUrl),
+          loadSpriteManifest(smallGroupManifestUrl),
+          loadSpriteManifest(bigGroupManifestUrl),
+          loadSpriteManifest(houseManifestUrl),
+        ]);
+
+        const individualImageUrl = new URL(`../../assets/sprites/people/individual/${individualManifest.spritesheet}`, import.meta.url);
+        const smallGroupImageUrl = new URL(`../../assets/sprites/people/small_group/${smallGroupManifest.spritesheet}`, import.meta.url);
+        const bigGroupImageUrl = new URL(`../../assets/sprites/people/big_group/${bigGroupManifest.spritesheet}`, import.meta.url);
+        const houseImageUrl = new URL(`../../assets/sprites/establishments/house/${houseManifest.spritesheet}`, import.meta.url);
+
+        const [individualImage, smallGroupImage, bigGroupImage, houseImage] = await Promise.all([
+          loadImage(individualImageUrl),
+          loadImage(smallGroupImageUrl),
+          loadImage(bigGroupImageUrl),
+          loadImage(houseImageUrl),
+        ]);
+
+        if (cancelled) return;
+
+        peopleSpriteRef.current = { manifest: individualManifest, image: individualImage };
+        smallGroupSpriteRef.current = { manifest: smallGroupManifest, image: smallGroupImage };
+        bigGroupSpriteRef.current = { manifest: bigGroupManifest, image: bigGroupImage };
+        houseSpriteRef.current = { manifest: houseManifest, image: houseImage };
+        setSpritesReady(true);
+      } catch {
+        if (!cancelled) {
+          setSpritesReady(false);
+        }
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -191,6 +349,8 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       tileLoader.update(canvasSize.width, canvasSize.height);
       ctx.fillStyle = '#87CEEB';
       ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
+
+      const now = performance.now();
 
       const tiles = tileLoader.getLoadedTiles();
       const zoom = cameraSystem.getState().zoom;
@@ -325,8 +485,58 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           const isHovered = hoveredEstablishmentId === est.id;
           const isSelected = selectedEstablishmentId === est.id;
           
-          // Draw establishment building
-          ctx.fillStyle = '#8B7355';
+          // Draw establishment building (sprite if available)
+          const houseSprite = houseSpriteRef.current;
+          if (spritesReady && houseSprite) {
+            const stateKey = est.isOpen ? (est.state || 'deserted') : 'closed';
+            const stateInfo = houseSprite.manifest.states[stateKey] ?? houseSprite.manifest.states.deserted;
+
+            const anim = establishmentAnimRef.current.get(est.id) ?? {
+              frameIndex: 0,
+              lastFrameTime: 0,
+            };
+
+            const animSpeed = houseSprite.manifest.animationSpeed ?? 750;
+            if (now - anim.lastFrameTime > animSpeed) {
+              anim.frameIndex = (anim.frameIndex + 1) % (stateInfo?.frames ?? 2);
+              anim.lastFrameTime = now;
+              establishmentAnimRef.current.set(est.id, anim);
+            }
+
+            const frameW = houseSprite.manifest.frameWidth;
+            const frameH = houseSprite.manifest.frameHeight;
+            const sx = anim.frameIndex * frameW;
+            const sy = (stateInfo?.row ?? 0) * frameH;
+
+            const zoom = cameraSystem.getState().zoom;
+            const dw = frameW * zoom;
+            const dh = frameH * zoom;
+            const ax = houseSprite.manifest.anchorX ?? 0.5;
+            const ay = houseSprite.manifest.anchorY ?? 0.8;
+
+            ctx.drawImage(
+              houseSprite.image,
+              sx,
+              sy,
+              frameW,
+              frameH,
+              screenX - dw * ax,
+              screenY + scaledH / 2 - dh * ay,
+              dw,
+              dh
+            );
+          } else {
+            ctx.fillStyle = '#8B7355';
+            ctx.beginPath();
+            ctx.moveTo(screenX, screenY);
+            ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
+            ctx.lineTo(screenX, screenY + scaledH);
+            ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          // Outline / selection styling
           if (isSelected) {
             ctx.strokeStyle = '#00ffff';
             ctx.lineWidth = 4;
@@ -337,13 +547,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             ctx.strokeStyle = '#654321';
             ctx.lineWidth = 2;
           }
-          ctx.beginPath();
-          ctx.moveTo(screenX, screenY);
-          ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
-          ctx.lineTo(screenX, screenY + scaledH);
-          ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
-          ctx.closePath();
-          ctx.fill();
+          drawDiamondPath(ctx, screenX, screenY, scaledW, scaledH);
           ctx.stroke();
 
           // Add glow effect for selected/hovered
@@ -352,12 +556,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             ctx.shadowColor = isSelected ? '#00ffff' : '#ff0080';
             ctx.shadowBlur = 15;
             ctx.globalAlpha = 0.55;
-            ctx.beginPath();
-            ctx.moveTo(screenX, screenY);
-            ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
-            ctx.lineTo(screenX, screenY + scaledH);
-            ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
-            ctx.closePath();
+            drawDiamondPath(ctx, screenX, screenY, scaledW, scaledH);
             ctx.stroke();
             ctx.restore();
           }
@@ -387,12 +586,66 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           if (g.state === 'visiting' || g.state === 'despawned') return;
           
           const radius = 8 + g.size * 2;
-          
-          // Main circle
-          ctx.fillStyle = g.color;
-          ctx.beginPath();
-          ctx.arc(screenX, screenY + scaledH / 2, radius, 0, Math.PI * 2);
-          ctx.fill();
+
+          // People sprite (fallback to circle)
+          const peopleSprite = (() => {
+            if (g.size <= 1) return peopleSpriteRef.current;
+            if (g.size <= 5) return smallGroupSpriteRef.current;
+            return bigGroupSpriteRef.current;
+          })();
+
+          if (spritesReady && peopleSprite) {
+            const spriteState = getPeopleSpriteState(g.facingDirection);
+            const stateInfo = peopleSprite.manifest.states[spriteState] ?? peopleSprite.manifest.states.look_down;
+            const framesPerState = stateInfo?.frames ?? 2;
+
+            const anim = groupAnimRef.current.get(g.id) ?? {
+              frameIndex: 0,
+              lastFrameTime: 0,
+            };
+            const animSpeed = peopleSprite.manifest.animationSpeed ?? 300;
+            if (now - anim.lastFrameTime > animSpeed) {
+              anim.frameIndex = (anim.frameIndex + 1) % framesPerState;
+              anim.lastFrameTime = now;
+              groupAnimRef.current.set(g.id, anim);
+            }
+
+            const variants = peopleSprite.manifest.variants ?? [];
+            const variantIndex = variants.length
+              ? stableStringHash(g.id + String(g.type ?? '')) % variants.length
+              : 0;
+            const variantCol = variants[variantIndex]?.column ?? 0;
+
+            const frameW = peopleSprite.manifest.frameWidth;
+            const frameH = peopleSprite.manifest.frameHeight;
+
+            const sx = (variantCol * framesPerState + anim.frameIndex) * frameW;
+            const sy = (stateInfo?.row ?? 0) * frameH;
+
+            const zoom = cameraSystem.getState().zoom;
+            const dw = frameW * zoom;
+            const dh = frameH * zoom;
+            const ax = peopleSprite.manifest.anchorX ?? 0.5;
+            const ay = peopleSprite.manifest.anchorY ?? 0.9;
+
+            ctx.drawImage(
+              peopleSprite.image,
+              sx,
+              sy,
+              frameW,
+              frameH,
+              screenX - dw * ax,
+              screenY + scaledH / 2 - dh * ay,
+              dw,
+              dh
+            );
+          } else {
+            // Fallback: circle
+            ctx.fillStyle = g.color;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY + scaledH / 2, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
           
           // Border - highlight if hovered or selected
           if (isSelected) {
@@ -440,6 +693,10 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           ctx.fillStyle = '#fff';
           ctx.font = 'bold 10px monospace';
           ctx.fillText(g.size.toString(), screenX, screenY + scaledH / 2 - radius - 8);
+
+          if (isSelected) {
+            drawGroupStateIndicator(ctx, g, screenX, screenY + scaledH / 2);
+          }
         });
       }
 

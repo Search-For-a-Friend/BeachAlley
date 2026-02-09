@@ -992,7 +992,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   actionBarOverlay: {
     position: 'absolute',
-    bottom: '15px',
+    bottom: 'calc(15px + env(safe-area-inset-bottom, 0px))',
     left: '15px',
     right: '15px',
     background: 'rgba(26, 26, 46, 0.95)',
@@ -1006,7 +1006,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   actionBarOverlayCompact: {
-    bottom: '5px',
+    bottom: 'calc(5px + env(safe-area-inset-bottom, 0px))',
     left: '5px',
     right: '5px',
     padding: '6px',
@@ -1041,7 +1041,7 @@ const styles: Record<string, React.CSSProperties> = {
   drawerOverlay: {
     position: 'absolute',
     top: '40%',
-    bottom: '75px',
+    bottom: 'calc(75px + env(safe-area-inset-bottom, 0px))',
     left: '15px',
     right: '15px',
     background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
@@ -1227,6 +1227,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: 'rgba(26, 26, 46, 0.95)',
     borderTop: '2px solid rgba(0, 255, 255, 0.3)',
     backdropFilter: 'blur(10px)',
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
     flexShrink: 0,
     zIndex: 14,
   },

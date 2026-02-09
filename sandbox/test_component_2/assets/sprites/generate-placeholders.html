@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sprite Placeholder Generator</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      min-height: 100vh;
+      padding: 40px;
+      margin: 0;
+    }
+    h1 { color: #ff6b9d; text-align: center; }
+    h2 { color: #00ffff; margin-top: 40px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .sprite-preview {
+      background: #2a2a4e;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      border: 2px solid #ff6b9d;
+    }
+    .sprite-preview h3 { margin: 0 0 10px 0; color: #ffd93d; }
+    .sprite-preview canvas {
+      border: 1px solid #444;
+      image-rendering: pixelated;
+      display: block;
+      margin: 10px 0;
+    }
+    button {
+      background: #ff6b9d;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+    button:hover { background: #ff8ab5; }
+    .info {
+      background: rgba(0,255,255,0.1);
+      padding: 15px;
+      border-radius: 6px;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+    .grid-overlay { color: rgba(255,255,255,0.3); font-size: 12px; }
+    #download-all {
+      background: #22c55e;
+      font-size: 18px;
+      padding: 15px 30px;
+      display: block;
+      margin: 30px auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 Sprite Placeholder Generator</h1>
+    <p style="text-align: center;">This tool generates placeholder spritesheets for Beach Alley development.</p>
+    
+    <button id="download-all">📦 Download All Spritesheets</button>
+
+    <h2>🏠 Establishments</h2>
+    <div id="establishments"></div>
+
+    <h2>👥 People</h2>
+    <div id="people"></div>
+  </div>
+
+  <script>
+    // ============================================
+    // MANIFEST DEFINITIONS
+    // ============================================
+    
+    const ESTABLISHMENTS = {
+      house: {
+        name: "house",
+        frameWidth: 64,
+        frameHeight: 80,
+        states: [
+          { name: "closed", row: 0, frames: 2, color: "#4a4a4a" },
+          { name: "deserted", row: 1, frames: 2, color: "#6b7280" },
+          { name: "visited", row: 2, frames: 2, color: "#22c55e" },
+          { name: "busy", row: 3, frames: 2, color: "#f59e0b" },
+          { name: "crowded", row: 4, frames: 2, color: "#ef4444" }
+        ]
+      }
+    };
+
+    const PEOPLE = {
+      individual: {
+        name: "individual",
+        frameWidth: 32,
+        frameHeight: 48,
+        variants: 4,
+        variantNames: ["tourist_1", "tourist_2", "tourist_3", "tourist_4"],
+        variantColors: ["#00ffff", "#ff6b9d", "#ffd93d", "#6bcb77"],
+        states: [
+          { name: "look_down", row: 0, frames: 2 },
+          { name: "look_up", row: 1, frames: 2 },
+          { name: "look_side", row: 2, frames: 2 }
+        ]
+      },
+      small_group: {
+        name: "small_group",
+        frameWidth: 48,
+        frameHeight: 48,
+        variants: 3,
+        variantNames: ["couple", "family", "friends"],
+        variantColors: ["#ff6b9d", "#ffd93d", "#6bcb77"],
+        states: [
+          { name: "look_down", row: 0, frames: 2 },
+          { name: "look_up", row: 1, frames: 2 },
+          { name: "look_side", row: 2, frames: 2 }
+        ]
+      },
+      big_group: {
+        name: "big_group",
+        frameWidth: 64,
+        frameHeight: 48,
+        variants: 2,
+        variantNames: ["tour_group", "party"],
+        variantColors: ["#00ffff", "#ff6b9d"],
+        states: [
+          { name: "look_down", row: 0, frames: 2 },
+          { name: "look_up", row: 1, frames: 2 },
+          { name: "look_side", row: 2, frames: 2 }
+        ]
+      }
+    };
+
+    // ============================================
+    // DRAWING FUNCTIONS
+    // ============================================
+
+    function generateEstablishmentSpritesheet(config) {
+      const cols = 2; // frames per state
+      const rows = config.states.length;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = config.frameWidth * cols;
+      canvas.height = config.frameHeight * rows;
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Fill background with transparency indicator
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (const state of config.states) {
+        for (let frame = 0; frame < state.frames; frame++) {
+          const x = frame * config.frameWidth;
+          const y = state.row * config.frameHeight;
+          
+          drawEstablishmentFrame(ctx, x, y, config.frameWidth, config.frameHeight, state.color, frame);
+          
+          // Draw frame label
+          ctx.fillStyle = 'rgba(255,255,255,0.5)';
+          ctx.font = '8px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${state.name}_${frame}`, x + config.frameWidth/2, y + config.frameHeight - 3);
+        }
+      }
+      
+      // Draw grid lines
+      drawGrid(ctx, canvas.width, canvas.height, config.frameWidth, config.frameHeight);
+      
+      return canvas;
+    }
+
+    function drawEstablishmentFrame(ctx, x, y, w, h, color, frame) {
+      const padding = 4;
+      const buildingH = h - 30;
+      const roofH = 20;
+      
+      // Roof
+      ctx.fillStyle = '#ff6b9d';
+      ctx.beginPath();
+      ctx.moveTo(x + padding - 5, y + roofH + 5);
+      ctx.lineTo(x + w/2, y + padding);
+      ctx.lineTo(x + w - padding + 5, y + roofH + 5);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Building body
+      ctx.fillStyle = color;
+      ctx.fillRect(x + padding, y + roofH + 5, w - padding*2, buildingH);
+      
+      // Building outline
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + padding, y + roofH + 5, w - padding*2, buildingH);
+      
+      // Door
+      ctx.fillStyle = '#1a1a2e';
+      const doorW = 12;
+      const doorH = 20;
+      ctx.fillRect(x + w/2 - doorW/2, y + h - padding - doorH - 10, doorW, doorH);
+      
+      // Windows
+      ctx.fillStyle = frame === 0 ? '#ffd93d' : '#ffe066';
+      const winSize = 8;
+      ctx.fillRect(x + padding + 8, y + roofH + 15, winSize, winSize);
+      ctx.fillRect(x + w - padding - 8 - winSize, y + roofH + 15, winSize, winSize);
+      
+      // Frame variation: slight glow for frame 1
+      if (frame === 1) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + padding - 1, y + roofH + 4, w - padding*2 + 2, buildingH + 2);
+      }
+    }
+
+    function generatePeopleSpritesheet(config) {
+      const framesPerVariant = 2;
+      const cols = config.variants * framesPerVariant;
+      const rows = config.states.length;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = config.frameWidth * cols;
+      canvas.height = config.frameHeight * rows;
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Fill background
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (const state of config.states) {
+        for (let variant = 0; variant < config.variants; variant++) {
+          for (let frame = 0; frame < framesPerVariant; frame++) {
+            const x = (variant * framesPerVariant + frame) * config.frameWidth;
+            const y = state.row * config.frameHeight;
+            const color = config.variantColors[variant];
+            
+            drawPeopleFrame(ctx, x, y, config.frameWidth, config.frameHeight, color, state.name, frame, config.variants > 1 ? variant + 1 : 1);
+          }
+        }
+      }
+      
+      // Draw grid lines
+      drawGrid(ctx, canvas.width, canvas.height, config.frameWidth, config.frameHeight);
+      
+      return canvas;
+    }
+
+    function drawPeopleFrame(ctx, x, y, w, h, color, direction, frame, groupSize) {
+      const centerX = x + w/2;
+      const centerY = y + h * 0.55;
+      const radius = Math.min(w, h) * 0.25;
+      
+      // Body shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(centerX + 2, centerY + radius + 5, radius * 0.8, radius * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Body
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Body outline
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Head
+      const headRadius = radius * 0.5;
+      const headY = centerY - radius - headRadius * 0.3;
+      
+      ctx.fillStyle = '#ffe4c4';
+      ctx.beginPath();
+      ctx.arc(centerX, headY, headRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Eyes position based on direction
+      let eyeOffsetX = 0, eyeOffsetY = 0;
+      if (direction === 'look_down') eyeOffsetY = 2;
+      else if (direction === 'look_up') eyeOffsetY = -3;
+      else if (direction === 'look_side') eyeOffsetX = 3;
+      
+      // Eyes
+      ctx.fillStyle = '#333';
+      const eyeSize = 2;
+      ctx.beginPath();
+      ctx.arc(centerX - 4 + eyeOffsetX, headY + eyeOffsetY, eyeSize, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(centerX + 4 + eyeOffsetX, headY + eyeOffsetY, eyeSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Group members (for groups)
+      if (groupSize > 1) {
+        const extraCount = Math.min(groupSize - 1, 3);
+        for (let i = 0; i < extraCount; i++) {
+          ctx.globalAlpha = 0.6;
+          ctx.fillStyle = color;
+          const offsetX = (i - extraCount/2 + 0.5) * radius * 0.7;
+          ctx.beginPath();
+          ctx.arc(centerX + offsetX, centerY + radius * 0.6, radius * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+      
+      // Frame variation: bounce effect
+      if (frame === 1) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY - 2, radius + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      
+      // Direction indicator arrow
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      const arrows = { 'look_down': '↓', 'look_up': '↑', 'look_side': '→' };
+      ctx.fillText(arrows[direction] || '', centerX, y + h - 5);
+    }
+
+    function drawGrid(ctx, width, height, cellW, cellH) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1;
+      
+      for (let x = 0; x <= width; x += cellW) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      
+      for (let y = 0; y <= height; y += cellH) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+    }
+
+    // ============================================
+    // UI FUNCTIONS
+    // ============================================
+
+    function downloadCanvas(canvas, filename) {
+      const link = document.createElement('a');
+      link.download = filename;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    function createPreview(container, name, canvas, path) {
+      const div = document.createElement('div');
+      div.className = 'sprite-preview';
+      div.innerHTML = `
+        <h3>${name}</h3>
+        <div class="info">
+          📁 Save to: <code>${path}</code><br>
+          📐 Size: ${canvas.width} × ${canvas.height}px
+        </div>
+      `;
+      
+      // Scale canvas for preview
+      const previewCanvas = document.createElement('canvas');
+      const scale = 2;
+      previewCanvas.width = canvas.width * scale;
+      previewCanvas.height = canvas.height * scale;
+      previewCanvas.style.width = canvas.width * scale + 'px';
+      previewCanvas.style.height = canvas.height * scale + 'px';
+      const previewCtx = previewCanvas.getContext('2d');
+      previewCtx.imageSmoothingEnabled = false;
+      previewCtx.drawImage(canvas, 0, 0, previewCanvas.width, previewCanvas.height);
+      
+      div.appendChild(previewCanvas);
+      
+      const btn = document.createElement('button');
+      btn.textContent = '💾 Download spritesheet.png';
+      btn.onclick = () => downloadCanvas(canvas, 'spritesheet.png');
+      div.appendChild(btn);
+      
+      // Store canvas for batch download
+      div.dataset.path = path;
+      div._canvas = canvas;
+      
+      container.appendChild(div);
+      return div;
+    }
+
+    // ============================================
+    // MAIN
+    // ============================================
+
+    const allCanvases = [];
+
+    // Generate establishments
+    const estContainer = document.getElementById('establishments');
+    for (const [key, config] of Object.entries(ESTABLISHMENTS)) {
+      const canvas = generateEstablishmentSpritesheet(config);
+      const path = `establishments/${key}/spritesheet.png`;
+      createPreview(estContainer, `${config.name} (${canvas.width}×${canvas.height})`, canvas, path);
+      allCanvases.push({ canvas, path, name: key });
+    }
+
+    // Generate people
+    const peopleContainer = document.getElementById('people');
+    for (const [key, config] of Object.entries(PEOPLE)) {
+      const canvas = generatePeopleSpritesheet(config);
+      const path = `people/${key}/spritesheet.png`;
+      createPreview(peopleContainer, `${config.name} (${canvas.width}×${canvas.height})`, canvas, path);
+      allCanvases.push({ canvas, path, name: key });
+    }
+
+    // Download all button
+    document.getElementById('download-all').onclick = () => {
+      allCanvases.forEach(({ canvas, name }, i) => {
+        setTimeout(() => {
+          downloadCanvas(canvas, `${name}_spritesheet.png`);
+        }, i * 300);
+      });
+    };
+  </script>
+</body>
+</html>

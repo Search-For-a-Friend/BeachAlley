@@ -52,7 +52,17 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   }, [terrainMap]);
 
   return (
-    <div style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+    <div
+      style={{
+        width: '100vw',
+        height: '100dvh',
+        maxHeight: '-webkit-fill-available',
+        overflow: 'hidden',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+      }}
+    >
       <LayoutTabbed
         onBack={onBackToMenu}
         onChangeLayout={() => {}}

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PNG Pixel Art → SVG (Rects)</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <h1>PNG Pixel Art → SVG</h1>
+        <div class="subtitle">Uploads a PNG and converts pixels into SVG <code>&lt;rect&gt;</code>s (merged runs + palette classes).</div>
+      </header>
+
+      <section class="panel">
+        <div class="controls">
+          <label class="control">
+            <div class="label">PNG file</div>
+            <input id="fileInput" type="file" accept="image/png" />
+          </label>
+
+          <label class="control">
+            <div class="label">Pixel size</div>
+            <input id="pixelSize" type="number" min="1" step="1" value="8" />
+          </label>
+
+          <label class="control checkbox">
+            <input id="includeTransparent" type="checkbox" />
+            <div class="label">Include fully transparent pixels</div>
+          </label>
+
+          <div class="buttons">
+            <button id="convertBtn" disabled>Convert</button>
+            <button id="downloadBtn" disabled>Download SVG</button>
+          </div>
+
+          <div id="stats" class="stats"></div>
+        </div>
+
+        <div class="preview">
+          <div class="previewTitle">Preview</div>
+          <div id="previewHost" class="previewHost"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="outputHeader">
+          <div class="outputTitle">Generated SVG</div>
+          <button id="copyBtn" disabled>Copy</button>
+        </div>
+        <textarea id="output" class="output" spellcheck="false" placeholder="Upload a PNG then click Convert..."></textarea>
+      </section>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
