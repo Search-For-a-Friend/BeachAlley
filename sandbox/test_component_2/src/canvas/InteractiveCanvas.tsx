@@ -8,6 +8,7 @@ import { CameraState } from '../types/canvas';
 import { TerrainMap } from '../types/environment';
 import { GameState, Establishment } from '../types';
 import { CANVAS_CONFIG } from './config';
+import { getBuildingCapacity } from '../game/engine';
 
 type SpriteManifest = {
   name: string;
@@ -215,6 +216,8 @@ export interface InteractiveCanvasProps {
   gridManager?: any; // GridManager type from game engine
   buildModeEnabled?: boolean;
   onSelectionTileChange?: (tile: { row: number; col: number } | null) => void;
+  buildingRotation?: number;
+  selectedBuilding?: { icon: string; name: string; price: string } | null;
 }
 
 export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
@@ -233,6 +236,8 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   gridManager,
   buildModeEnabled,
   onSelectionTileChange,
+  buildingRotation = 0,
+  selectedBuilding = null,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -397,21 +402,74 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           onSelectionTileChange?.({ row: clampedRow, col: clampedCol });
         }
 
-        const { worldX, worldY } = cameraSystem.tileToWorld(clampedRow, clampedCol);
-        const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+        // Calculate building size based on selected building
+        const buildingSize = selectedBuilding ? getBuildingCapacity(selectedBuilding.name) <= 4 ? 1 : getBuildingCapacity(selectedBuilding.name) <= 8 ? 2 : 3 : 1;
 
+        // Draw full footprint for larger buildings
+        const sizeOffset = Math.floor(buildingSize / 2);
+        for (let dy = 0; dy < buildingSize; dy++) {
+          for (let dx = 0; dx < buildingSize; dx++) {
+            const tileRow = clampedRow + dy - sizeOffset;
+            const tileCol = clampedCol + dx - sizeOffset;
+            
+            // Skip if out of bounds
+            if (tileRow < 0 || tileRow >= terrainMap.height || tileCol < 0 || tileCol >= terrainMap.width) continue;
+            
+            const { worldX, worldY } = cameraSystem.tileToWorld(tileRow, tileCol);
+            const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 255, 255, 0.18)';
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(screenX, screenY);
+            ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
+            ctx.lineTo(screenX, screenY + scaledH);
+            ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        // Draw entrance preview based on rotation (relative to building center)
+        const entranceOffsets = [
+          { r: -1, c: 0 }, // North
+          { r: 0, c: -1 }, // West
+          { r: 1, c: 0 }, // South
+          { r: 0, c: 1 }, // East
+        ];
+        const entranceOffset = entranceOffsets[buildingRotation % 4];
+        
+        // Calculate entrance position relative to building footprint center
+        const buildingCenterRow = clampedRow + sizeOffset;
+        const buildingCenterCol = clampedCol + sizeOffset;
+        const { worldX: entranceWorldX, worldY: entranceWorldY } = cameraSystem.tileToWorld(buildingCenterRow + entranceOffset.r, buildingCenterCol + entranceOffset.c);
+        const { screenX: entranceScreenX, screenY: entranceScreenY } = cameraSystem.worldToScreen(entranceWorldX, entranceWorldY);
+        
+        // Draw entrance preview
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 255, 255, 0.18)';
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
-        ctx.lineWidth = 3;
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.3)'; // Yellow for entrance
+        ctx.strokeStyle = 'rgba(255, 255, 0, 0.8)';
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(screenX, screenY);
-        ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
-        ctx.lineTo(screenX, screenY + scaledH);
-        ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+        ctx.moveTo(entranceScreenX, entranceScreenY);
+        ctx.lineTo(entranceScreenX + scaledW / 2, entranceScreenY + scaledH / 2);
+        ctx.lineTo(entranceScreenX, entranceScreenY + scaledH);
+        ctx.lineTo(entranceScreenX - scaledW / 2, entranceScreenY + scaledH / 2);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        
+        // Draw entrance direction indicator
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const directionEmojis = ['⬆️', '⬅️', '⬇️', '➡️'];
+        ctx.fillText(directionEmojis[buildingRotation % 4], entranceScreenX, entranceScreenY + scaledH / 2);
         ctx.restore();
       } else {
         if (lastSelectionKeyRef.current !== null) {
@@ -479,90 +537,121 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           if (!est.gridPosition) return;
           const row = est.gridPosition.y;
           const col = est.gridPosition.x;
-          const { worldX, worldY } = cameraSystem.tileToWorld(row, col);
-          const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
-
+          
           const isHovered = hoveredEstablishmentId === est.id;
           const isSelected = selectedEstablishmentId === est.id;
           
-          // Draw establishment building (sprite if available)
-          const houseSprite = houseSpriteRef.current;
-          if (spritesReady && houseSprite) {
-            const stateKey = est.isOpen ? (est.state || 'deserted') : 'closed';
-            const stateInfo = houseSprite.manifest.states[stateKey] ?? houseSprite.manifest.states.deserted;
+          // Calculate establishment size based on capacity
+          const size = est.maxCapacity <= 4 ? 1 : est.maxCapacity <= 8 ? 2 : 3;
+          const sizeOffset = Math.floor(size / 2);
+          
+          // Draw full footprint for larger establishments
+          for (let dy = 0; dy < size; dy++) {
+            for (let dx = 0; dx < size; dx++) {
+              const tileRow = row + dy - sizeOffset;
+              const tileCol = col + dx - sizeOffset;
+              const { worldX, worldY } = cameraSystem.tileToWorld(tileRow, tileCol);
+              const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+              
+              // Only draw sprite for main tile (center), others get colored tiles
+              if (dy === sizeOffset && dx === sizeOffset) {
+                // Draw establishment building (sprite if available)
+                const houseSprite = houseSpriteRef.current;
+                if (spritesReady && houseSprite) {
+                  const stateKey = est.isOpen ? (est.state || 'deserted') : 'closed';
+                  const stateInfo = houseSprite.manifest.states[stateKey] ?? houseSprite.manifest.states.deserted;
 
-            const anim = establishmentAnimRef.current.get(est.id) ?? {
-              frameIndex: 0,
-              lastFrameTime: 0,
-            };
+                  const anim = establishmentAnimRef.current.get(est.id) ?? {
+                    frameIndex: 0,
+                    lastFrameTime: 0,
+                  };
 
-            const animSpeed = houseSprite.manifest.animationSpeed ?? 750;
-            if (now - anim.lastFrameTime > animSpeed) {
-              anim.frameIndex = (anim.frameIndex + 1) % (stateInfo?.frames ?? 2);
-              anim.lastFrameTime = now;
-              establishmentAnimRef.current.set(est.id, anim);
+                  const animSpeed = houseSprite.manifest.animationSpeed ?? 750;
+                  if (now - anim.lastFrameTime > animSpeed) {
+                    anim.frameIndex = (anim.frameIndex + 1) % (stateInfo?.frames ?? 2);
+                    anim.lastFrameTime = now;
+                    establishmentAnimRef.current.set(est.id, anim);
+                  }
+
+                  const frameW = houseSprite.manifest.frameWidth;
+                  const frameH = houseSprite.manifest.frameHeight;
+                  const sx = anim.frameIndex * frameW;
+                  const sy = (stateInfo?.row ?? 0) * frameH;
+
+                  const zoom = cameraSystem.getState().zoom;
+                  const dw = frameW * zoom;
+                  const dh = frameH * zoom;
+                  const ax = houseSprite.manifest.anchorX ?? 0.5;
+                  const ay = houseSprite.manifest.anchorY ?? 0.8;
+
+                  ctx.drawImage(
+                    houseSprite.image,
+                    sx,
+                    sy,
+                    frameW,
+                    frameH,
+                    screenX - dw * ax,
+                    screenY + scaledH / 2 - dh * ay,
+                    dw,
+                    dh
+                  );
+                } else {
+                  ctx.fillStyle = '#8B7355';
+                  ctx.beginPath();
+                  ctx.moveTo(screenX, screenY);
+                  ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
+                  ctx.lineTo(screenX, screenY + scaledH);
+                  ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+                  ctx.closePath();
+                  ctx.fill();
+                }
+              } else {
+                // Draw colored tile for other parts of footprint
+                ctx.fillStyle = 'rgba(139, 115, 85, 0.3)';
+                ctx.beginPath();
+                ctx.moveTo(screenX, screenY);
+                ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
+                ctx.lineTo(screenX, screenY + scaledH);
+                ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+                ctx.closePath();
+                ctx.fill();
+              }
+
+              // Outline / selection styling for main tile only
+              if (dy === sizeOffset && dx === sizeOffset) {
+                if (isSelected) {
+                  ctx.strokeStyle = '#00ffff';
+                  ctx.lineWidth = 4;
+                } else if (isHovered) {
+                  ctx.strokeStyle = '#ff0080';
+                  ctx.lineWidth = 3;
+                } else {
+                  ctx.strokeStyle = '#654321';
+                  ctx.lineWidth = 2;
+                }
+                drawDiamondPath(ctx, screenX, screenY, scaledW, scaledH);
+                ctx.stroke();
+              }
             }
-
-            const frameW = houseSprite.manifest.frameWidth;
-            const frameH = houseSprite.manifest.frameHeight;
-            const sx = anim.frameIndex * frameW;
-            const sy = (stateInfo?.row ?? 0) * frameH;
-
-            const zoom = cameraSystem.getState().zoom;
-            const dw = frameW * zoom;
-            const dh = frameH * zoom;
-            const ax = houseSprite.manifest.anchorX ?? 0.5;
-            const ay = houseSprite.manifest.anchorY ?? 0.8;
-
-            ctx.drawImage(
-              houseSprite.image,
-              sx,
-              sy,
-              frameW,
-              frameH,
-              screenX - dw * ax,
-              screenY + scaledH / 2 - dh * ay,
-              dw,
-              dh
-            );
-          } else {
-            ctx.fillStyle = '#8B7355';
-            ctx.beginPath();
-            ctx.moveTo(screenX, screenY);
-            ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
-            ctx.lineTo(screenX, screenY + scaledH);
-            ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
-            ctx.closePath();
-            ctx.fill();
           }
 
-          // Outline / selection styling
-          if (isSelected) {
-            ctx.strokeStyle = '#00ffff';
-            ctx.lineWidth = 4;
-          } else if (isHovered) {
-            ctx.strokeStyle = '#ff0080';
-            ctx.lineWidth = 3;
-          } else {
-            ctx.strokeStyle = '#654321';
-            ctx.lineWidth = 2;
-          }
-          drawDiamondPath(ctx, screenX, screenY, scaledW, scaledH);
-          ctx.stroke();
-
-          // Add glow effect for selected/hovered
+          // Draw guest count on top of main tile
+          const centerTileRow = row;
+          const centerTileCol = col;
+          const { worldX: centerWorldX, worldY: centerWorldY } = cameraSystem.tileToWorld(centerTileRow, centerTileCol);
+          const { screenX: centerScreenX, screenY: centerScreenY } = cameraSystem.worldToScreen(centerWorldX, centerWorldY);
+          drawOccupancyBar(ctx, est, centerScreenX, centerScreenY - scaledH / 2 - 10);
+          
+          // Add glow effect for selected/hovered (only once per establishment)
           if (isSelected || isHovered) {
             ctx.save();
             ctx.shadowColor = isSelected ? '#00ffff' : '#ff0080';
             ctx.shadowBlur = 15;
             ctx.globalAlpha = 0.55;
-            drawDiamondPath(ctx, screenX, screenY, scaledW, scaledH);
+            drawDiamondPath(ctx, centerScreenX, centerScreenY, scaledW, scaledH);
             ctx.stroke();
             ctx.restore();
           }
-          
-          // Draw guest count on top
-          drawOccupancyBar(ctx, est, screenX, screenY - scaledH / 2 - 10);
         });
         
         // Draw people groups

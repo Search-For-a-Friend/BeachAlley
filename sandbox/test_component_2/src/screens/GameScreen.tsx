@@ -17,10 +17,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const [gameState, setGameState] = useState<GameState | null>(null);
   const engineRef = useRef<GameEngine | null>(null);
 
-  const handleTryBuild = (row: number, col: number, building: { icon: string; name: string; price: string }) => {
+  const handleTryBuild = (row: number, col: number, building: { icon: string; name: string; price: string }, rotation: number) => {
     const engine = engineRef.current;
     if (!engine) return false;
-    const ok = engine.tryBuildEstablishment(row, col, building);
+    const ok = engine.tryBuildEstablishment(row, col, building, rotation);
     setGameState(engine.getState());
     return ok;
   };

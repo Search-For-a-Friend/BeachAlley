@@ -5,6 +5,7 @@ import { GameState } from '../types';
 import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
 import { GroupDetailsPanel } from '../components/GroupDetailsPanel';
 import { EstablishmentDetailsPanel } from '../components/EstablishmentDetailsPanel';
+import { getBuildingCapacity } from '../game/engine';
 
 interface LayoutTabbedProps {
   onBack: () => void;
@@ -14,7 +15,7 @@ interface LayoutTabbedProps {
   terrainMap: TerrainMap;
   gameState?: GameState | null;
   gridManager?: any;
-  onTryBuild?: (row: number, col: number, building: { icon: string; name: string; price: string }) => boolean;
+  onTryBuild?: (row: number, col: number, building: { icon: string; name: string; price: string }, rotation: number) => boolean;
 }
 
 type Tab = 'game' | 'build' | 'manage';
@@ -39,6 +40,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   const [activeTab, setActiveTab] = useState<Tab | null>('game');
   const [openDrawer, setOpenDrawer] = useState<DrawerType>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<BuildingInfo | null>(null);
+  const [buildingRotation, setBuildingRotation] = useState(0);
   const [isActionBarVisible, setIsActionBarVisible] = useState(true);
   const [displayedTab, setDisplayedTab] = useState<Tab | null>('game');
   const [previousTab, setPreviousTab] = useState<Tab | null>(null);
@@ -139,6 +141,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
       setSelectedBuilding(null);
     } else {
       setSelectedBuilding(building);
+      setBuildingRotation(0); // Reset rotation when selecting a new building
     }
   };
 
@@ -174,10 +177,14 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
     setIsDrawerExpanded(!isDrawerExpanded);
   };
 
+  const rotateBuilding = () => {
+    setBuildingRotation((prev) => (prev + 1) % 4);
+  };
+
   const handleTryBuild = () => {
     if (!selectedBuilding) return;
     if (!selectionTile) return;
-    onTryBuild?.(selectionTile.row, selectionTile.col, selectedBuilding);
+    onTryBuild?.(selectionTile.row, selectionTile.col, selectedBuilding, buildingRotation);
   };
 
   // Update action bar visibility based on both activeTab and selectedBuilding
@@ -217,6 +224,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
     { icon: '🏖️', name: 'Sun Lounger', price: '$100' },
     { icon: '🍽️', name: 'Restaurant', price: '$1,000' },
     { icon: '🛍️', name: 'Shop', price: '$750' },
+    { icon: '🏢', name: 'Mall', price: '$5,500' },
     { icon: '🚻', name: 'Toilet', price: '$200' },
     { icon: '🚿', name: 'Shower', price: '$150' },
     { icon: '⛱️', name: 'Parasol', price: '$50' },
@@ -320,6 +328,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           gridManager={gridManager}
           buildModeEnabled={!!selectedBuilding}
           onSelectionTileChange={setSelectionTile}
+          buildingRotation={buildingRotation}
+          selectedBuilding={selectedBuilding}
         />
         
         {/* Contextual Column (for selected building) */}
@@ -344,8 +354,23 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           {/* Action Buttons */}
           <div style={styles.contextualBody}>
             <button style={styles.contextualButton} onClick={handleTryBuild}>🏗️</button>
-            <button style={styles.contextualButton}>🔄</button>
-            <button style={styles.contextualButton}>🎨</button>
+            <button style={styles.contextualButton} onClick={rotateBuilding}>🔄</button>
+          </div>
+          
+          {/* Building Info */}
+          <div style={styles.buildingInfo}>
+            <div style={styles.buildingInfoRow}>
+              <span style={styles.buildingInfoLabel}>Size:</span>
+              <span style={styles.buildingInfoValue}>{getBuildingCapacity(selectedBuilding?.name || '')}</span>
+            </div>
+          </div>
+          
+          {/* Rotation Info */}
+          <div style={styles.rotationInfo}>
+            <div style={styles.rotationLabel}>Entrance:</div>
+            <div style={styles.rotationIndicator}>
+              {['⬆️', '⬅️', '⬇️', '➡️'][buildingRotation]}
+            </div>
           </div>
         </div>
         
@@ -1177,6 +1202,26 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  rotationInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '8px',
+    background: 'rgba(26, 26, 46, 0.8)',
+    borderRadius: '8px',
+    border: '1px solid rgba(0, 255, 255, 0.2)',
+  },
+  rotationLabel: {
+    fontSize: '0.75rem',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  rotationIndicator: {
+    fontSize: '1.5rem',
+    lineHeight: 1,
   },
   card: {
     display: 'flex',

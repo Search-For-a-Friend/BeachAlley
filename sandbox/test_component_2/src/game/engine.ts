@@ -79,6 +79,40 @@ function is2x2Walkable(terrainMap: TerrainMap, row: number, col: number): boolea
   return true;
 }
 
+function findGrassTileNextToSand(terrainMap: TerrainMap, fromRow: number, fromCol: number): { row: number; col: number } | null {
+  let best: { row: number; col: number } | null = null;
+  let bestDist = Infinity;
+  
+  terrainMap.tiles.forEach((type, key) => {
+    if (type !== 'grass') return;
+    const [row, col] = key.split(',').map(Number);
+    
+    // Check if this grass tile is adjacent to any sand tile
+    const neighbors = [
+      { r: row - 1, c: col },
+      { r: row + 1, c: col },
+      { r: row, c: col - 1 },
+      { r: row, c: col + 1 },
+    ];
+    
+    const hasSandNeighbor = neighbors.some(n => {
+      if (n.r < 0 || n.c < 0 || n.r >= terrainMap.height || n.c >= terrainMap.width) return false;
+      const neighborType = terrainMap.tiles.get(tileKey(n.r, n.c));
+      return neighborType === 'sand';
+    });
+    
+    if (hasSandNeighbor) {
+      const dist = (row - fromRow) ** 2 + (col - fromCol) ** 2;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { row, col };
+      }
+    }
+  });
+  
+  return best;
+}
+
 /** Find grass tiles approximately 10 tiles away from (centerRow, centerCol). */
 function findGrassTilesAboutDistanceAway(
   terrainMap: TerrainMap,
@@ -97,6 +131,21 @@ function findGrassTilesAboutDistanceAway(
     if (d >= minD && d <= maxD) out.push({ row, col });
   });
   return out;
+}
+
+export function getBuildingCapacity(buildingName: string): number {
+  switch (buildingName.toLowerCase()) {
+    case 'shop':
+      return 8;
+    case 'mall':
+      return 20;
+    case 'restaurant':
+      return 7;
+    case 'beach bar':
+    case 'sun lounger':
+    default:
+      return 4;
+  }
 }
 
 export class GameEngine {
@@ -134,93 +183,42 @@ export class GameEngine {
 
   private createInitialStateFromTerrain(terrainMap: TerrainMap): GameState {
     this.gridManager.initializeFromTerrainMap(terrainMap);
-    const establishments: Establishment[] = [];
-    const sandTile = findSandTileForCenter(terrainMap);
-    const centerRow = sandTile?.row ?? terrainMap.height / 2;
-    const centerCol = sandTile?.col ?? terrainMap.width / 2;
-
-    const grassTile = findNearestGrassTile(terrainMap, centerRow, centerCol);
-    if (!grassTile) {
-      return {
-        establishments: [],
-        groups: [],
-        time: 0,
-        isPaused: false,
-        stats: { totalGroupsSpawned: 0, totalGroupsDespawned: 0, totalVisits: 0, totalRevenue: 0 },
-      };
-    }
-
-    let estRow = grassTile.row;
-    let estCol = grassTile.col;
-    if (!is2x2Walkable(terrainMap, estRow, estCol)) {
-      const candidates: Array<{ row: number; col: number }> = [];
-      terrainMap.tiles.forEach((type, key) => {
-        if (type !== 'grass') return;
-        const [r, c] = key.split(',').map(Number);
-        if (is2x2Walkable(terrainMap, r, c)) candidates.push({ row: r, col: c });
-      });
-      const byDist = candidates.sort(
-        (a, b) =>
-          (a.row - centerRow) ** 2 + (a.col - centerCol) ** 2 -
-          ((b.row - centerRow) ** 2 + (b.col - centerCol) ** 2)
-      );
-      if (byDist.length) {
-        estRow = byDist[0].row;
-        estCol = byDist[0].col;
-      }
-    }
-
-    const gridCenterX = estCol + 1;
-    const gridCenterY = estRow + 1;
-    const worldPos = this.gridToWorld(gridCenterX, gridCenterY);
-    const est = createEstablishment(worldPos, {
-      maxCapacity: 8,
-      attractionRadius: 25,
-      attractionPower: 100,
-      serviceTime: this.config.defaultServiceTime,
-    });
-    est.gridPosition = { x: gridCenterX, y: gridCenterY };
-    const adj = [
-      [estRow - 1, estCol],
-      [estRow, estCol - 1],
-      [estRow + 2, estCol],
-      [estRow + 2, estCol + 1],
-      [estRow, estCol + 2],
-      [estRow + 1, estCol + 2],
-      [estRow - 1, estCol + 1],
-      [estRow + 1, estCol - 1],
-    ];
-    let entranceRow = estRow;
-    let entranceCol = estCol;
-    for (const [r, c] of adj) {
-      if (r >= 0 && r < terrainMap.height && c >= 0 && c < terrainMap.width && this.gridManager.isWalkable(c, r)) {
-        entranceRow = r;
-        entranceCol = c;
-        break;
-      }
-    }
-    est.entrance = { x: entranceCol + 0.5, y: entranceRow + 0.5 };
-    establishments.push(est);
-    this.establishmentGridPositions.set(est.id, { gridX: gridCenterX, gridY: gridCenterY });
-    this.gridManager.markEstablishmentFootprint(est, est.entrance);
-    est.isOpen = true;
-
-    const spawnCandidates = findGrassTilesAboutDistanceAway(terrainMap, estRow, estCol, 10, 3);
-    if (spawnCandidates.length > 0) {
-      const spawn = spawnCandidates[Math.floor(Math.random() * spawnCandidates.length)];
-      const sx = spawn.col;
-      const sy = spawn.row;
-      this.gridManager.setTileType(sx, sy, 'spawn');
-      this.spawnTiles.push({ x: sx + 0.5, y: sy + 0.5 });
-    }
-
-    return {
-      establishments,
+    
+    // Initialize empty state first
+    const initialState: GameState = {
+      establishments: [],
       groups: [],
       time: 0,
       isPaused: false,
       stats: { totalGroupsSpawned: 0, totalGroupsDespawned: 0, totalVisits: 0, totalRevenue: 0 },
     };
+    
+    // Set state before calling tryBuildEstablishment
+    this.state = initialState;
+    
+    // Find first grass tile next to a sand tile for initial establishment
+    const grassTile = findGrassTileNextToSand(terrainMap, Math.floor(terrainMap.height / 2), Math.floor(terrainMap.width / 2));
+    if (!grassTile) {
+      return initialState;
+    }
+
+    // Build initial establishment using tryBuildEstablishment (1x1 tile)
+    const building = { icon: '🏖️', name: 'Initial Establishment', price: '$0' };
+    const success = this.tryBuildEstablishment(grassTile.row, grassTile.col, building, 0);
+    
+    if (success) {
+      // Create spawn tile 10 tiles away from the establishment
+      const spawnCandidates = findGrassTilesAboutDistanceAway(terrainMap, grassTile.row, grassTile.col, 10, 3);
+      if (spawnCandidates.length > 0) {
+        const spawn = spawnCandidates[Math.floor(Math.random() * spawnCandidates.length)];
+        const sx = spawn.col;
+        const sy = spawn.row;
+        this.gridManager.setTileType(sx, sy, 'spawn');
+        this.spawnTiles.push({ x: sx + 0.5, y: sy + 0.5 });
+      }
+    }
+    
+    return this.getState();
   }
 
   private gridToWorld(gridX: number, gridY: number): Vector2 {
@@ -268,7 +266,8 @@ export class GameEngine {
   tryBuildEstablishment(
     row: number,
     col: number,
-    _building: { icon: string; name: string; price: string }
+    _building: { icon: string; name: string; price: string },
+    rotation: number = 0
   ): boolean {
     if (!this.terrainMap) return false;
 
@@ -299,7 +298,7 @@ export class GameEngine {
     const worldPos = this.gridToWorld(gridX + 0.5, gridY + 0.5);
 
     const est = createEstablishment(worldPos, {
-      maxCapacity: 4,
+      maxCapacity: getBuildingCapacity(_building.name),
       attractionRadius: 25,
       attractionPower: 100,
       serviceTime: this.config.defaultServiceTime,
@@ -307,27 +306,30 @@ export class GameEngine {
 
     est.gridPosition = { x: gridX, y: gridY };
 
-    const neighbors = [
-      { r: row - 1, c: col },
-      { r: row, c: col - 1 },
-      { r: row + 1, c: col },
-      { r: row, c: col + 1 },
+    // Place entrance based on rotation (0=North, 1=West, 2=South, 3=East)
+    // For larger establishments, entrance should be placed relative to center of footprint
+    const size = est.maxCapacity <= 4 ? 1 : est.maxCapacity <= 8 ? 2 : 3;
+    const sizeOffset = Math.floor(size / 2);
+    const centerRow = row + sizeOffset;
+    const centerCol = col + sizeOffset;
+    
+    const entranceDirections = [
+      { r: centerRow - 1, c: centerCol }, // North
+      { r: centerRow, c: centerCol - 1 }, // West
+      { r: centerRow + 1, c: centerCol }, // South
+      { r: centerRow, c: centerCol + 1 }, // East
     ];
+    
+    const entranceDir = entranceDirections[rotation % 4];
+    let entranceRow = entranceDir.r;
+    let entranceCol = entranceDir.c;
 
-    let entranceRow = row;
-    let entranceCol = col;
-    let foundEntrance = false;
-    for (const n of neighbors) {
-      if (n.r < 0 || n.c < 0 || n.r >= this.terrainMap.height || n.c >= this.terrainMap.width) continue;
-      if (this.gridManager.isWalkable(n.c, n.r)) {
-        entranceRow = n.r;
-        entranceCol = n.c;
-        foundEntrance = true;
-        break;
-      }
+    // Validate entrance position
+    if (entranceRow < 0 || entranceCol < 0 || entranceRow >= this.terrainMap.height || entranceCol >= this.terrainMap.width) {
+      return false;
     }
-
-    if (!foundEntrance) {
+    
+    if (!this.gridManager.isWalkable(entranceCol, entranceRow)) {
       return false;
     }
 
@@ -389,7 +391,8 @@ export class GameEngine {
         group.currentEstablishment = target.id;
         group.targetPosition = target.entrance || null;
         setGroupState(group, 'seeking');
-      } else if (group.state === 'idle') {
+      } else {
+        // If no suitable establishment is found, make the group wander randomly
         const pt = pathTiles[Math.floor(Math.random() * pathTiles.length)];
         group.targetPosition = { ...pt };
         setGroupState(group, 'wandering');
