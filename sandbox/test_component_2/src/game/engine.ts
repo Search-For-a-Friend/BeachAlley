@@ -7,24 +7,21 @@ import {
   GameConfig,
   GameEvent,
   DEFAULT_CONFIG,
-  PeopleGroup,
   Establishment,
+  PeopleGroup,
   EstablishmentState,
-  Staff,
   Vector2,
-  TransactionType,
-  BuildingCosts,
   BUILDING_COSTS,
-  MONEY_THRESHOLDS,
+  Staff,
   STATE_THRESHOLDS,
+  TransactionType,
+  MONEY_THRESHOLDS,
 } from '../types';
 import {
   createEstablishment,
-  updateEstablishmentState,
   hasCapacity,
   addOccupants,
   removeOccupants,
-  addRevenue,
   getAttractionMultiplier,
 } from './establishment';
 import {
@@ -41,49 +38,6 @@ import { tileKey } from '../utils/terrainGeneration';
 import { CANVAS_CONFIG } from '../canvas/config';
 
 export type EventCallback = (event: GameEvent) => void;
-
-function findSandTileForCenter(terrainMap: TerrainMap): { row: number; col: number } | null {
-  const centerRow = terrainMap.height / 2;
-  const centerCol = terrainMap.width / 2;
-  let best: { row: number; col: number } | null = null;
-  let bestDist = Infinity;
-  terrainMap.tiles.forEach((type, key) => {
-    if (type !== 'sand') return;
-    const [row, col] = key.split(',').map(Number);
-    const dist = (row - centerRow) ** 2 + (col - centerCol) ** 2;
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = { row, col };
-    }
-  });
-  return best;
-}
-
-function findNearestGrassTile(terrainMap: TerrainMap, fromRow: number, fromCol: number): { row: number; col: number } | null {
-  let best: { row: number; col: number } | null = null;
-  let bestDist = Infinity;
-  terrainMap.tiles.forEach((type, key) => {
-    if (type !== 'grass') return;
-    const [row, col] = key.split(',').map(Number);
-    const dist = (row - fromRow) ** 2 + (col - fromCol) ** 2;
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = { row, col };
-    }
-  });
-  return best;
-}
-
-/** Check if 2x2 block at (row, col) is all walkable (grass or sand). */
-function is2x2Walkable(terrainMap: TerrainMap, row: number, col: number): boolean {
-  for (let dr = 0; dr <= 1; dr++) {
-    for (let dc = 0; dc <= 1; dc++) {
-      const t = terrainMap.tiles.get(tileKey(row + dr, col + dc));
-      if (t !== 'grass' && t !== 'sand') return false;
-    }
-  }
-  return true;
-}
 
 function findGrassTileNextToSand(terrainMap: TerrainMap, fromRow: number, fromCol: number): { row: number; col: number } | null {
   let best: { row: number; col: number } | null = null;
@@ -230,14 +184,6 @@ export class GameEngine {
       this.state.gameWon = true;
       this.emit({ type: 'GAME_OVER', won: true, reason: `Money reached $${MONEY_THRESHOLDS.WIN_THRESHOLD}` });
     }
-  }
-
-  private getEstablishmentName(est: Establishment): string {
-    // This is a placeholder - in a real implementation, you'd store the building type
-    // For now, we'll infer from capacity
-    if (est.maxCapacity <= 4) return 'beach bar';
-    if (est.maxCapacity <= 8) return 'restaurant';
-    return 'mall';
   }
 
   // Staff Management Methods
@@ -775,13 +721,6 @@ export class GameEngine {
       if (group.state === 'leaving' && isOutOfBounds(group, this.gridManager.getDimensions().width, this.gridManager.getDimensions().height)) toRemove.push(group.id), this.state.stats.totalGroupsDespawned++, this.emit({ type: 'GROUP_DESPAWNED', groupId: group.id });
     }
     this.state.groups = this.state.groups.filter(g => !toRemove.includes(g.id));
-  }
-
-  private stateUpdatePhase(): void {
-    for (const est of this.state.establishments) {
-      const { changed, previousState } = updateEstablishmentState(est);
-      if (changed) this.emit({ type: 'STATE_CHANGED', establishmentId: est.id, from: previousState, to: est.state as EstablishmentState });
-    }
   }
 
   forceSpawn(): void {

@@ -23,6 +23,9 @@ export function createEstablishment(
     serviceTime: options.serviceTime ?? 8000,
     totalVisitors: 0,
     totalRevenue: 0,
+    buildingType: options.buildingType ?? 'unknown',
+    staffIds: options.staffIds ?? [],
+    dailyStaffCost: options.dailyStaffCost ?? 0,
     ...options,
   };
 }

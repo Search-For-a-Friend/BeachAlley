@@ -1057,17 +1057,6 @@ const FinanceItem: React.FC<{ label: string; value: string; positive?: boolean }
   </div>
 );
 
-const StaffMember: React.FC<{ name: string; role: string; salary: string }> = ({ name, role, salary }) => (
-  <div style={styles.staffMember}>
-    <div style={styles.staffAvatar}>👤</div>
-    <div style={styles.staffInfo}>
-      <div style={styles.staffName}>{name}</div>
-      <div style={styles.staffRole}>{role}</div>
-    </div>
-    <div style={styles.staffSalary}>{salary}/day</div>
-  </div>
-);
-
 const SettingToggle: React.FC<{ 
   label: string; 
   enabled?: boolean; 

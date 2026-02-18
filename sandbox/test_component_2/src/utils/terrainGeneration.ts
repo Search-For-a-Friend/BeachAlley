@@ -50,7 +50,6 @@ export function getDistanceFromBottomLeft(
   mapRows: number
 ): number {
   const bottomRow = mapRows - 1;
-  const leftCol = 0;
   const distanceFromEdge = Math.min(bottomRow - row, col);
   return distanceFromEdge;
 }

@@ -3,8 +3,6 @@
  * Grass and sand from terrain map are walkable (path); water is not.
  */
 
-import { Vector2 } from './index';
-
 export type TileType =
   | 'path'
   | 'spawn'

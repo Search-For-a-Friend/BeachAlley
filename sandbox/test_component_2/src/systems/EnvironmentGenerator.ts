@@ -14,7 +14,6 @@ export class EnvironmentGenerator {
   private rightLinePath: Map<number, number> = new Map();
   private coveCenter: { row: number; col: number } | null = null;
   private coveOuterRadius: number = 0;
-  private coveInnerRadius: number = 0;
 
   constructor(mapRows: number, mapCols: number, seed: number = TERRAIN_CONFIG.SEED) {
     this.mapRows = mapRows;
@@ -176,8 +175,7 @@ export class EnvironmentGenerator {
       }
       this.coveCenter = { row: centerRow, col: centerCol };
       this.coveOuterRadius = baseRadius;
-      this.coveInnerRadius = 0;
-    }
+      }
     const centerRow = this.coveCenter!.row;
     const centerCol = this.coveCenter!.col;
     const radius = this.coveOuterRadius;

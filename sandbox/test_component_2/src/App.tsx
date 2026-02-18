@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { SplashScreen } from './screens/SplashScreen';
 import { MainMenu } from './screens/MainMenu';
 import { EnvironmentSelector } from './screens/EnvironmentSelector';
