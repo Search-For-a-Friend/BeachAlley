@@ -360,12 +360,6 @@ export class GameEngine {
     const success = this.tryBuildEstablishment(grassTile.row, grassTile.col, building, 0);
     
     if (success) {
-      // Create staff for the initial establishment
-      const establishments = this.getState().establishments;
-      if (establishments.length > 0) {
-        this.createStaffForEstablishment(establishments[establishments.length - 1].id);
-      }
-      
       // Create spawn tile 10 tiles away from the establishment
       const spawnCandidates = findGrassTilesAboutDistanceAway(terrainMap, grassTile.row, grassTile.col, 10, 3);
       if (spawnCandidates.length > 0) {
