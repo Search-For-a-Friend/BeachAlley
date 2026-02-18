@@ -10,7 +10,13 @@ import {
   PeopleGroup,
   Establishment,
   EstablishmentState,
+  Staff,
   Vector2,
+  TransactionType,
+  BuildingCosts,
+  BUILDING_COSTS,
+  MONEY_THRESHOLDS,
+  STATE_THRESHOLDS,
 } from '../types';
 import {
   createEstablishment,
@@ -170,14 +176,154 @@ export class GameEngine {
     this.state = terrainMap ? this.createInitialStateFromTerrain(terrainMap) : this.createInitialStateFallback();
   }
 
+  // Money Management Methods
+  public getMoney(): number {
+    return this.state.money;
+  }
+
+  public canAfford(cost: number): boolean {
+    return this.state.money >= cost;
+  }
+
+  public addMoney(amount: number, transactionType: TransactionType): void {
+    this.state.money += amount;
+    if (transactionType === 'customer_revenue') {
+      this.state.totalRevenue += amount;
+    }
+    this.emit({ type: 'MONEY_CHANGED', amount, transactionType, newBalance: this.state.money });
+    this.checkWinLoseConditions();
+  }
+
+  public deductMoney(amount: number, transactionType: TransactionType): boolean {
+    if (!this.canAfford(amount)) {
+      return false;
+    }
+    this.state.money -= amount;
+    if (transactionType === 'daily_operations' || transactionType === 'building_purchase') {
+      this.state.totalExpenses += amount;
+    }
+    this.emit({ type: 'MONEY_CHANGED', amount: -amount, transactionType, newBalance: this.state.money });
+    this.checkWinLoseConditions();
+    return true;
+  }
+
+  public processDailyCosts(): void {
+    let totalDailyCost = 0;
+    
+    // Calculate costs from all staff members
+    this.state.staff.forEach(staff => {
+      totalDailyCost += staff.dailyCost;
+    });
+    
+    if (totalDailyCost > 0) {
+      this.deductMoney(totalDailyCost, 'daily_operations');
+    }
+  }
+
+  public checkWinLoseConditions(): void {
+    if (this.state.money <= MONEY_THRESHOLDS.LOSE_THRESHOLD && !this.state.isGameOver) {
+      this.state.isGameOver = true;
+      this.state.gameWon = false;
+      this.emit({ type: 'GAME_OVER', won: false, reason: `Money fell below $${MONEY_THRESHOLDS.LOSE_THRESHOLD}` });
+    } else if (this.state.money >= MONEY_THRESHOLDS.WIN_THRESHOLD && !this.state.isGameOver) {
+      this.state.isGameOver = true;
+      this.state.gameWon = true;
+      this.emit({ type: 'GAME_OVER', won: true, reason: `Money reached $${MONEY_THRESHOLDS.WIN_THRESHOLD}` });
+    }
+  }
+
+  private getEstablishmentName(est: Establishment): string {
+    // This is a placeholder - in a real implementation, you'd store the building type
+    // For now, we'll infer from capacity
+    if (est.maxCapacity <= 4) return 'beach bar';
+    if (est.maxCapacity <= 8) return 'restaurant';
+    return 'mall';
+  }
+
+  // Staff Management Methods
+  public createStaffForEstablishment(establishmentId: string): Staff[] {
+    const establishment = this.state.establishments.find(e => e.id === establishmentId);
+    if (!establishment) {
+      return [];
+    }
+
+    const buildingCosts = BUILDING_COSTS[establishment.buildingType.toLowerCase()];
+    if (!buildingCosts) {
+      return [];
+    }
+
+    const newStaff: Staff[] = [];
+    let totalStaffCost = 0;
+
+    buildingCosts.staffRequired.forEach(staffReq => {
+      for (let i = 0; i < staffReq.count; i++) {
+        const staff: Staff = {
+          id: `staff_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: `${staffReq.occupation} ${i + 1}`,
+          occupation: staffReq.occupation,
+          establishmentId: establishmentId,
+          dailyCost: staffReq.dailyCost,
+          efficiency: 0.8 + Math.random() * 0.4, // 0.8 to 1.2 efficiency
+        };
+        newStaff.push(staff);
+        totalStaffCost += staffReq.dailyCost;
+      }
+    });
+
+    // Add staff to game state
+    this.state.staff.push(...newStaff);
+    
+    // Update establishment with staff IDs and daily cost
+    establishment.staffIds = newStaff.map(s => s.id);
+    establishment.dailyStaffCost = totalStaffCost;
+
+    return newStaff;
+  }
+
+  public getStaffForEstablishment(establishmentId: string): Staff[] {
+    return this.state.staff.filter(s => s.establishmentId === establishmentId);
+  }
+
+  public getAllStaff(): Staff[] {
+    return this.state.staff;
+  }
+
+  public removeStaff(staffId: string): boolean {
+    const staffIndex = this.state.staff.findIndex(s => s.id === staffId);
+    if (staffIndex === -1) return false;
+
+    const staff = this.state.staff[staffIndex];
+    
+    // Remove staff from game state
+    this.state.staff.splice(staffIndex, 1);
+    
+    // Update establishment
+    const establishment = this.state.establishments.find(e => e.id === staff.establishmentId);
+    if (establishment) {
+      establishment.staffIds = establishment.staffIds.filter(id => id !== staffId);
+      establishment.dailyStaffCost = establishment.staffIds
+        .map(id => this.state.staff.find(s => s.id === id)?.dailyCost || 0)
+        .reduce((sum, cost) => sum + cost, 0);
+    }
+
+    return true;
+  }
+
   private createInitialStateFallback(): GameState {
     this.gridManager.initializeEmpty();
     return {
       establishments: [],
       groups: [],
+      staff: [],
       time: 0,
       isPaused: false,
       stats: { totalGroupsSpawned: 0, totalGroupsDespawned: 0, totalVisits: 0, totalRevenue: 0 },
+      money: MONEY_THRESHOLDS.STARTING_MONEY,
+      totalRevenue: 0,
+      totalExpenses: 0,
+      dayCount: 1,
+      isGameOver: false,
+      gameWon: false,
     };
   }
 
@@ -188,9 +334,16 @@ export class GameEngine {
     const initialState: GameState = {
       establishments: [],
       groups: [],
+      staff: [],
       time: 0,
       isPaused: false,
       stats: { totalGroupsSpawned: 0, totalGroupsDespawned: 0, totalVisits: 0, totalRevenue: 0 },
+      money: MONEY_THRESHOLDS.STARTING_MONEY,
+      totalRevenue: 0,
+      totalExpenses: 0,
+      dayCount: 1,
+      isGameOver: false,
+      gameWon: false,
     };
     
     // Set state before calling tryBuildEstablishment
@@ -203,10 +356,16 @@ export class GameEngine {
     }
 
     // Build initial establishment using tryBuildEstablishment (1x1 tile)
-    const building = { icon: '🏖️', name: 'Initial Establishment', price: '$0' };
+    const building = { icon: '🏖️', name: 'Beach Bar', price: '$0' };
     const success = this.tryBuildEstablishment(grassTile.row, grassTile.col, building, 0);
     
     if (success) {
+      // Create staff for the initial establishment
+      const establishments = this.getState().establishments;
+      if (establishments.length > 0) {
+        this.createStaffForEstablishment(establishments[establishments.length - 1].id);
+      }
+      
       // Create spawn tile 10 tiles away from the establishment
       const spawnCandidates = findGrassTilesAboutDistanceAway(terrainMap, grassTile.row, grassTile.col, 10, 3);
       if (spawnCandidates.length > 0) {
@@ -271,6 +430,12 @@ export class GameEngine {
   ): boolean {
     if (!this.terrainMap) return false;
 
+    // Check if player can afford the building
+    const buildingCosts = BUILDING_COSTS[_building.name.toLowerCase()];
+    if (!buildingCosts || !this.canAfford(buildingCosts.buildCost)) {
+      return false;
+    }
+
     if (row < 0 || col < 0 || row >= this.terrainMap.height || col >= this.terrainMap.width) {
       return false;
     }
@@ -305,6 +470,7 @@ export class GameEngine {
     });
 
     est.gridPosition = { x: gridX, y: gridY };
+    est.buildingType = _building.name; // Store the actual building type
 
     // Place entrance based on rotation (0=North, 1=West, 2=South, 3=East)
     // For larger establishments, entrance should be placed relative to center of footprint
@@ -336,21 +502,40 @@ export class GameEngine {
     est.entrance = { x: entranceCol + 0.5, y: entranceRow + 0.5 };
     est.isOpen = true;
 
+    // Deduct building cost
+    this.deductMoney(buildingCosts.buildCost, 'building_purchase');
+
     this.state.establishments.push(est);
     this.establishmentGridPositions.set(est.id, { gridX, gridY });
     this.gridManager.markEstablishmentFootprint(est, est.entrance);
+            
+    // Create staff for the new establishment
+    this.createStaffForEstablishment(est.id);
 
     this.emit({ type: 'STATE_CHANGED', establishmentId: est.id, from: 'deserted', to: est.state as EstablishmentState });
     return true;
   }
 
-  togglePause(): void {
-    this.state.isPaused = !this.state.isPaused;
+  advanceDay(): void {
+    if (this.state.isGameOver) return;
+    
+    this.state.dayCount++;
+    this.processDailyCosts();
+    
+    // Emit event for UI updates
+    this.emit({ type: 'MONEY_CHANGED', amount: 0, transactionType: 'daily_operations', newBalance: this.state.money });
   }
 
   update(deltaTime: number): void {
     if (this.state.isPaused) return;
     this.state.time += deltaTime;
+    
+    // Check for day advancement (every 60 seconds = 1 game day)
+    const dayLength = 60000; // 60 seconds in milliseconds
+    if (Math.floor(this.state.time / dayLength) > Math.floor((this.state.time - deltaTime) / dayLength)) {
+      this.advanceDay();
+    }
+    
     this.spawnPhase(deltaTime);
     this.decisionPhase();
     this.pathfindingPhase();
@@ -359,7 +544,6 @@ export class GameEngine {
     this.visitPhase(deltaTime);
     this.leavePhase();
     this.cleanupPhase();
-    this.stateUpdatePhase();
   }
 
   private spawnPhase(deltaTime: number): void {
@@ -529,11 +713,25 @@ export class GameEngine {
       const est = this.state.establishments.find(e => e.id === group.currentEstablishment);
       if (!est) continue;
       group.timeInEstablishment += deltaTime;
-      const moneySpent = (this.config.moneyPerSecond * deltaTime) / 1000;
-      group.money -= moneySpent;
-      addRevenue(est, moneySpent * group.size);
-      this.state.stats.totalRevenue += moneySpent * group.size;
       const occ = (est.currentOccupancy / est.maxCapacity) * 100;
+      
+      // Update establishment state based on occupancy
+      const previousState = est.state;
+      if (occ >= STATE_THRESHOLDS.crowded) {
+        est.state = 'crowded';
+      } else if (occ >= STATE_THRESHOLDS.busy) {
+        est.state = 'busy';
+      } else if (occ >= STATE_THRESHOLDS.visited) {
+        est.state = 'visited';
+      } else {
+        est.state = 'closed';
+      }
+      
+      // Emit state change event if state changed
+      if (previousState !== est.state) {
+        this.emit({ type: 'STATE_CHANGED', establishmentId: est.id, from: previousState, to: est.state });
+      }
+      
       let satChange = -this.config.satisfactionDecayRate * (deltaTime / 1000);
       if (occ > 80) satChange *= 2;
       if (occ < 50) satChange *= 0.5;
@@ -557,6 +755,17 @@ export class GameEngine {
       else if (Math.random() < 0.001) leave = true, reason = 'Decided to leave';
       if (leave) {
         removeOccupants(est, group.size);
+        
+        // Add customer revenue based on establishment type
+        const buildingCosts = BUILDING_COSTS[est.buildingType.toLowerCase()];
+        if (buildingCosts) {
+          const customerRevenue = buildingCosts.customerSpending * group.size;
+          this.addMoney(customerRevenue, 'customer_revenue');
+          
+          // Update establishment's total revenue
+          est.totalRevenue += customerRevenue;
+        }
+        
         group.targetPosition = this.getExitSpawnTile();
         setGroupState(group, 'leaving');
         this.emit({ type: 'GROUP_LEFT', groupId: group.id, establishmentId: est.id, reason });

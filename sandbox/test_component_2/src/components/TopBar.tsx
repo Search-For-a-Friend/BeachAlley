@@ -5,9 +5,25 @@ interface TopBarProps {
   onSettings?: () => void;
   title?: string;
   showStats?: boolean;
+  money?: number;
+  winProgress?: number;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({ onBack, onSettings, title = 'Beach Alley', showStats = true }) => {
+export const TopBar: React.FC<TopBarProps> = ({ onBack, onSettings, title = 'Beach Alley', showStats = true, money = 0, winProgress = 0 }) => {
+  const formatMoney = (amount: number): string => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const getMoneyColor = (amount: number): string => {
+    if (amount < 0) return '#ef4444'; // Red for negative
+    if (amount < 2000) return '#f59e0b'; // Orange for low
+    return '#10b981'; // Green for healthy
+  };
+
   return (
     <div style={styles.container}>
       <button style={styles.button} onClick={onBack} aria-label="Back">◀️</button>
@@ -15,8 +31,10 @@ export const TopBar: React.FC<TopBarProps> = ({ onBack, onSettings, title = 'Bea
         <h2 style={styles.title}>{title}</h2>
         {showStats && (
           <div style={styles.stats}>
-            <span style={styles.stat}>💰 1,234</span>
-            <span style={styles.stat}>⭐ 89%</span>
+            <span style={{ ...styles.stat, color: getMoneyColor(money) }}>💰 {formatMoney(money)}</span>
+            <span style={{ ...styles.stat, color: winProgress >= 100 ? '#10b981' : winProgress >= 50 ? '#f59e0b' : '#6b7280' }}>
+              🎯 {winProgress.toFixed(1)}%
+            </span>
           </div>
         )}
       </div>

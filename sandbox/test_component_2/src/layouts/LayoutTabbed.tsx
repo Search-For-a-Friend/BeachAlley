@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TopBar } from '../components/TopBar';
 import { TerrainMap } from '../types/environment';
-import { GameState } from '../types';
+import { GameState, BUILDING_COSTS } from '../types';
 import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
 import { GroupDetailsPanel } from '../components/GroupDetailsPanel';
 import { EstablishmentDetailsPanel } from '../components/EstablishmentDetailsPanel';
@@ -26,6 +26,15 @@ interface BuildingInfo {
   name: string;
   price: string;
 }
+
+// Helper function for formatting money
+const formatMoney = (amount: number): string => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+  }).format(amount);
+};
 
 export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({ 
   onBack, 
@@ -220,11 +229,11 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   }, [selectedBuilding]);
 
   const buildings: BuildingInfo[] = [
-    { icon: '🍹', name: 'Beach Bar', price: '$500' },
-    { icon: '🏖️', name: 'Sun Lounger', price: '$100' },
-    { icon: '🍽️', name: 'Restaurant', price: '$1,000' },
-    { icon: '🛍️', name: 'Shop', price: '$750' },
-    { icon: '🏢', name: 'Mall', price: '$5,500' },
+    { icon: '🍹', name: 'Beach Bar', price: `$${BUILDING_COSTS['beach bar'].buildCost}` },
+    { icon: '🏖️', name: 'Sun Lounger', price: `$${BUILDING_COSTS['sun lounger'].buildCost}` },
+    { icon: '🍽️', name: 'Restaurant', price: `$${BUILDING_COSTS['restaurant'].buildCost}` },
+    { icon: '🛍️', name: 'Shop', price: `$${BUILDING_COSTS['shop'].buildCost}` },
+    { icon: '🏢', name: 'Mall', price: `$${BUILDING_COSTS['mall'].buildCost}` },
     { icon: '🚻', name: 'Toilet', price: '$200' },
     { icon: '🚿', name: 'Shower', price: '$150' },
     { icon: '⛱️', name: 'Parasol', price: '$50' },
@@ -244,16 +253,23 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
       case 'build':
         return (
           <div style={{ ...styles.actionScroll, ...(isActionBarCompact ? styles.actionScrollCompact : {}) }}>
-            {buildings.map((building) => (
-              <Card
-                key={building.name}
-                icon={building.icon}
-                price={building.price}
-                active={selectedBuilding?.name === building.name}
-                onClick={() => handleBuildingSelect(building)}
-                compact={isActionBarCompact}
-              />
-            ))}
+            {buildings.map((building) => {
+              const buildingCosts = BUILDING_COSTS[building.name.toLowerCase()];
+              const canAfford = buildingCosts && gameState ? gameState.money >= buildingCosts.buildCost : false;
+              
+              return (
+                <Card
+                  key={building.name}
+                  icon={building.icon}
+                  price={building.price}
+                  active={selectedBuilding?.name === building.name}
+                  onClick={() => canAfford ? handleBuildingSelect(building) : undefined}
+                  compact={isActionBarCompact}
+                  disabled={!canAfford}
+                  canAfford={canAfford}
+                />
+              );
+            })}
           </div>
         );
       case 'manage':
@@ -310,8 +326,13 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
 
   return (
     <div style={styles.container}>
-      <TopBar onBack={onBack} onSettings={() => setOpenDrawer('settings')} />
-
+      <TopBar 
+        onBack={onBack} 
+        onSettings={() => setOpenDrawer('settings')} 
+        money={gameState?.money || 0}
+        winProgress={gameState ? Math.max(0, Math.min(100, ((gameState.money + 5000) / 55000) * 100)) : 0}
+      />
+      
       {/* Game View (never rescaled, full space) */}
       <div style={styles.gameView}>
         <InteractiveCanvas 
@@ -636,18 +657,34 @@ const Card: React.FC<{
   active?: boolean;
   onClick?: () => void;
   compact?: boolean;
-}> = ({ icon, price, active, onClick, compact }) => (
+  disabled?: boolean;
+  canAfford?: boolean;
+}> = ({ icon, price, active, onClick, compact, disabled = false, canAfford = true }) => (
   <button
     style={{
       ...styles.card,
       ...(active ? styles.cardActive : {}),
       ...(compact ? styles.cardCompact : {}),
+      ...(disabled ? { 
+        opacity: 0.5, 
+        cursor: 'not-allowed',
+        border: '2px solid rgba(255, 255, 255, 0.1)'
+      } : {}),
+      ...(canAfford ? {} : {
+        border: '2px solid #ef4444',
+        boxShadow: '0 0 10px rgba(239, 68, 68, 0.3)'
+      }),
     }}
-    onClick={onClick}
+    onClick={disabled ? undefined : onClick}
+    disabled={disabled}
   >
     <div style={{ ...styles.cardIcon, ...(compact ? styles.cardIconCompact : {}) }}>{icon}</div>
     {price && (
-      <div style={{ ...styles.cardPrice, ...(compact ? styles.cardPriceCompact : {}) }}>
+      <div style={{ 
+        ...styles.cardPrice, 
+        ...(compact ? styles.cardPriceCompact : {}),
+        ...(canAfford ? {} : { color: '#ef4444' })
+      }}>
         {price}
       </div>
     )}
@@ -693,13 +730,25 @@ const DrawerContent: React.FC<{
           title: 'Finance',
           content: (
             <div style={styles.drawerContent}>
-              <FinanceItem label="Cash on Hand" value="$5,230" positive />
-              <FinanceItem label="Daily Income" value="$1,240" positive />
-              <FinanceItem label="Daily Expenses" value="$320" />
-              <FinanceItem label="Net Profit" value="$920" positive />
-              <div style={styles.divider} />
-              <FinanceItem label="Loan Balance" value="$10,000" />
-              <FinanceItem label="Interest Rate" value="5.2%" />
+              {gameState && (
+                <>
+                  <FinanceItem label="Cash on Hand" value={formatMoney(gameState.money)} positive={gameState.money >= 0} />
+                  <FinanceItem label="Total Revenue" value={formatMoney(gameState.totalRevenue)} positive={gameState.totalRevenue >= 0} />
+                  <FinanceItem label="Total Expenses" value={formatMoney(gameState.totalExpenses)} positive={false} />
+                  <div style={styles.divider} />
+                  <FinanceItem label="Day" value={gameState.dayCount.toString()} positive={true} />
+                  <FinanceItem label="Buildings" value={gameState.establishments.length.toString()} positive={true} />
+                  <div style={styles.divider} />
+                  <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#FF0080', marginBottom: '8px' }}>
+                    {gameState.isGameOver ? (gameState.gameWon ? '🎉 VICTORY!' : '💸 GAME OVER') : '🎯 Keep Playing!'}
+                  </div>
+                  {gameState.isGameOver && (
+                    <div style={{ fontSize: '0.85rem', opacity: 0.8, marginTop: '5px' }}>
+                      {gameState.gameWon ? 'You reached $50,000!' : 'You fell into debt!'}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ),
         };
@@ -709,10 +758,40 @@ const DrawerContent: React.FC<{
           title: 'Staff Management',
           content: (
             <div style={styles.drawerContent}>
-              <StaffMember name="John Doe" role="Bartender" salary="$800" />
-              <StaffMember name="Jane Smith" role="Lifeguard" salary="$600" />
-              <StaffMember name="Bob Wilson" role="Cleaner" salary="$400" />
-              <button style={styles.hireButton}>+ Hire New Staff</button>
+              {gameState && (
+                <>
+                  <div style={styles.financeItem}>
+                    <span style={styles.financeLabel}>Total Staff</span>
+                    <span style={styles.financeValue}>{gameState.staff.length}</span>
+                  </div>
+                  <div style={styles.financeItem}>
+                    <span style={styles.financeLabel}>Daily Staff Cost</span>
+                    <span style={{ ...styles.financeValue, color: '#ef4444' }}>
+                      {formatMoney(gameState.staff.reduce((sum: number, staff: any) => sum + staff.dailyCost, 0))}
+                    </span>
+                  </div>
+                  <div style={styles.divider} />
+                  {gameState.staff.map((staff: any) => (
+                    <div key={staff.id} style={styles.staffMember}>
+                      <div style={styles.staffAvatar}>
+                        {staff.occupation === 'Bartender' ? '🍹' : 
+                         staff.occupation === 'Chef' ? '👨‍🍳' :
+                         staff.occupation === 'Waiter' ? '🍽️' :
+                         staff.occupation === 'Cashier' ? '💰' :
+                         staff.occupation === 'Sales Assistant' ? '🛍️' :
+                         staff.occupation === 'Manager' ? '👔' :
+                         staff.occupation === 'Security Guard' ? '👮' :
+                         staff.occupation === 'Attendant' ? '🏖️' : '👤'}
+                      </div>
+                      <div style={styles.staffInfo}>
+                        <div style={styles.staffName}>{staff.name}</div>
+                        <div style={styles.staffRole}>{staff.occupation}</div>
+                        <div style={styles.staffSalary}>{formatMoney(staff.dailyCost)}/day</div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           ),
         };
@@ -768,6 +847,35 @@ const DrawerContent: React.FC<{
                     onClose={() => setSelectedEstablishmentId && setSelectedEstablishmentId(null)}
                   />
                   <div style={styles.divider} />
+                  {/* Show staff for selected establishment */}
+                  {gameState && (
+                    <div style={{ marginBottom: '15px' }}>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#FF0080', marginBottom: '8px' }}>
+                        👥 Staff Members
+                      </div>
+                      {gameState.staff
+                        .filter((staff: any) => staff.establishmentId === selectedEstablishment.id)
+                        .map((staff: any) => (
+                          <div key={staff.id} style={styles.staffMember}>
+                            <div style={styles.staffAvatar}>
+                              {staff.occupation === 'Bartender' ? '🍹' : 
+                               staff.occupation === 'Chef' ? '👨‍🍳' :
+                               staff.occupation === 'Waiter' ? '🍽️' :
+                               staff.occupation === 'Cashier' ? '💰' :
+                               staff.occupation === 'Sales Assistant' ? '🛍️' :
+                               staff.occupation === 'Manager' ? '👔' :
+                               staff.occupation === 'Security Guard' ? '👮' :
+                               staff.occupation === 'Attendant' ? '🏖️' : '👤'}
+                            </div>
+                            <div style={styles.staffInfo}>
+                              <div style={styles.staffName}>{staff.name}</div>
+                              <div style={styles.staffRole}>{staff.occupation}</div>
+                              <div style={styles.staffSalary}>{formatMoney(staff.dailyCost)}/day</div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </>
               )}
               <div style={styles.financeItem}>
@@ -777,6 +885,33 @@ const DrawerContent: React.FC<{
               <div style={styles.financeItem}>
                 <span style={styles.financeLabel}>Open</span>
                 <span style={styles.financeValue}>{gameState?.establishments.filter((e: any) => e.isOpen).length || 0}</span>
+              </div>
+              <div style={styles.financeItem}>
+                <span style={styles.financeLabel}>Total Revenue</span>
+                <span style={{ ...styles.financeValue, color: '#22c55e' }}>
+                  {formatMoney(gameState?.establishments.reduce((sum: number, e: any) => sum + (e.totalRevenue || 0), 0) || 0)}
+                </span>
+              </div>
+              <div style={styles.financeItem}>
+                <span style={styles.financeLabel}>Total Visitors</span>
+                <span style={styles.financeValue}>
+                  {gameState?.establishments.reduce((sum: number, e: any) => sum + (e.totalVisitors || 0), 0) || 0}
+                </span>
+              </div>
+              <div style={styles.financeItem}>
+                <span style={styles.financeLabel}>Avg. Occupancy</span>
+                <span style={styles.financeValue}>
+                  {gameState && gameState.establishments.length > 0 
+                    ? Math.round(gameState.establishments.reduce((sum: number, e: any) => sum + ((e.currentOccupancy / e.maxCapacity) * 100), 0) / gameState.establishments.length) + '%'
+                    : '0%'
+                  }
+                </span>
+              </div>
+              <div style={styles.financeItem}>
+                <span style={styles.financeLabel}>Daily Staff Costs</span>
+                <span style={{ ...styles.financeValue, color: '#ef4444' }}>
+                  {formatMoney(gameState?.establishments.reduce((sum: number, e: any) => sum + (e.dailyStaffCost || 0), 0) || 0)}
+                </span>
               </div>
             </div>
           ),

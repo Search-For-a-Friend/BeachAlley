@@ -14,7 +14,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
     <div style={styles.container} onClick={onComplete}>
       <div style={styles.content}>
         <div style={styles.logo}>🌴</div>
-        <h1 style={styles.title}>Beach Alley</h1>
+        <h1 style={styles.title}>Beach Avenue</h1>
         <p style={styles.subtitle}>Build Your Paradise</p>
         <div style={styles.loader}>
           <div style={styles.loaderBar} />
