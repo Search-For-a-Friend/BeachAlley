@@ -37,6 +37,8 @@ import { TerrainMap } from '../types/environment';
 import { tileKey } from '../utils/terrainGeneration';
 import { CANVAS_CONFIG } from '../canvas/config';
 import Logger from '../utils/Logger';
+import { RecruitmentState, StaffCandidate, RECRUITMENT_CONFIG } from '../types/recruitment';
+import { CandidateGenerator } from '../systems/CandidateGenerator';
 
 export type EventCallback = (event: GameEvent) => void;
 
@@ -120,6 +122,8 @@ export class GameEngine {
   private terrainMap?: TerrainMap;
   /** Spawn tile centers (x, y) for exit and spawn. */
   private spawnTiles: Vector2[] = [];
+  /** Current recruitment state */
+  private recruitmentState: RecruitmentState | null = null;
 
   constructor(config: Partial<GameConfig> = {}, terrainMap?: TerrainMap) {
     Logger.info('SYS', 'Game engine initializing');
@@ -315,6 +319,194 @@ export class GameEngine {
     }
 
     return true;
+  }
+
+  // Recruitment System Methods
+  public getRecruitmentState(): RecruitmentState | null {
+    return this.recruitmentState;
+  }
+
+  public startRecruitment(establishmentId: string): void {
+    const establishment = this.state.establishments.find(e => e.id === establishmentId);
+    if (!establishment) {
+      Logger.error('GAME', 'Cannot start recruitment - establishment not found', { establishmentId });
+      return;
+    }
+
+    const buildingCosts = BUILDING_COSTS[establishment.buildingType.toLowerCase()];
+    if (!buildingCosts || buildingCosts.staffRequired.length === 0) {
+      Logger.warn('GAME', 'No staff required for this establishment', { establishmentId, buildingType: establishment.buildingType });
+      return;
+    }
+
+    // Set establishment to closed state
+    establishment.isOpen = false;
+    establishment.state = 'closed';
+
+    // Initialize recruitment state
+    this.recruitmentState = {
+      establishmentId,
+      currentPosition: 0,
+      totalPositions: buildingCosts.staffRequired.length,
+      currentOccupation: buildingCosts.staffRequired[0].occupation,
+      candidates: CandidateGenerator.generateCandidates(buildingCosts.staffRequired[0].occupation),
+      freeRerollsUsed: 0,
+      isOpen: true,
+    };
+
+    Logger.info('GAME', 'Recruitment started', {
+      establishmentId,
+      buildingType: establishment.buildingType,
+      totalPositions: buildingCosts.staffRequired.length,
+      firstOccupation: buildingCosts.staffRequired[0].occupation,
+    });
+  }
+
+  public generateCandidates(occupation: string, premium: boolean = false): StaffCandidate[] {
+    return CandidateGenerator.generateCandidates(occupation, premium);
+  }
+
+  public hireCandidate(establishmentId: string, candidate: StaffCandidate): void {
+    if (!this.recruitmentState || this.recruitmentState.establishmentId !== establishmentId) {
+      Logger.error('GAME', 'Invalid recruitment state for hiring', { establishmentId });
+      return;
+    }
+
+    const establishment = this.state.establishments.find(e => e.id === establishmentId);
+    if (!establishment) {
+      Logger.error('GAME', 'Establishment not found for hiring', { establishmentId });
+      return;
+    }
+
+    // Add staff to game state
+    const staff: Staff = {
+      id: candidate.id,
+      name: candidate.name,
+      occupation: candidate.occupation,
+      establishmentId,
+      dailyCost: candidate.dailyCost,
+      efficiency: 0.8 + (candidate.rating / 5.0) * 0.4, // Convert rating to efficiency
+    };
+    this.state.staff.push(staff);
+
+    // Update establishment
+    establishment.staffIds.push(staff.id);
+    establishment.dailyStaffCost += staff.dailyCost;
+
+    Logger.info('GAME', 'Staff member hired', {
+      establishmentId,
+      staffId: staff.id,
+      name: staff.name,
+      occupation: staff.occupation,
+      dailyCost: staff.dailyCost,
+      efficiency: staff.efficiency,
+      rating: candidate.rating,
+    });
+
+    // Move to next position or complete recruitment
+    this.advanceRecruitment();
+  }
+
+  public rerollCandidates(establishmentId: string, premium: boolean = false): boolean {
+    if (!this.recruitmentState || this.recruitmentState.establishmentId !== establishmentId) {
+      Logger.error('GAME', 'Invalid recruitment state for reroll', { establishmentId });
+      return false;
+    }
+
+    // Check if reroll is allowed
+    if (!premium && this.recruitmentState.freeRerollsUsed >= RECRUITMENT_CONFIG.freeRerollsPerPosition) {
+      Logger.warn('GAME', 'No free rerolls remaining', { establishmentId });
+      return false;
+    }
+
+    // Check if player can afford premium reroll
+    if (premium && !this.canAfford(RECRUITMENT_CONFIG.premiumRerollCost)) {
+      Logger.warn('GAME', 'Cannot afford premium reroll', { 
+        establishmentId, 
+        cost: RECRUITMENT_CONFIG.premiumRerollCost,
+        currentMoney: this.state.money 
+      });
+      return false;
+    }
+
+    // Deduct cost for premium reroll
+    if (premium) {
+      this.deductMoney(RECRUITMENT_CONFIG.premiumRerollCost, 'daily_operations');
+    } else {
+      this.recruitmentState.freeRerollsUsed++;
+    }
+
+    // Generate new candidates
+    this.recruitmentState.candidates = CandidateGenerator.generateCandidates(
+      this.recruitmentState.currentOccupation, 
+      premium
+    );
+
+    Logger.info('GAME', 'Candidates rerolled', {
+      establishmentId,
+      occupation: this.recruitmentState.currentOccupation,
+      premium,
+      freeRerollsUsed: this.recruitmentState.freeRerollsUsed,
+    });
+
+    return true;
+  }
+
+  public skipRecruitment(establishmentId: string): void {
+    if (!this.recruitmentState || this.recruitmentState.establishmentId !== establishmentId) {
+      Logger.error('GAME', 'Invalid recruitment state for skip', { establishmentId });
+      return;
+    }
+
+    // Generate temporary staff
+    const tempCandidate = CandidateGenerator.generateTemporaryStaff(this.recruitmentState.currentOccupation);
+    this.hireCandidate(establishmentId, tempCandidate);
+
+    Logger.info('GAME', 'Recruitment skipped - temporary staff hired', {
+      establishmentId,
+      occupation: this.recruitmentState.currentOccupation,
+      tempStaffId: tempCandidate.id,
+    });
+  }
+
+  private advanceRecruitment(): void {
+    if (!this.recruitmentState) return;
+
+    this.recruitmentState.currentPosition++;
+    
+    if (this.recruitmentState.currentPosition >= this.recruitmentState.totalPositions) {
+      // Recruitment complete
+      this.completeRecruitment();
+    } else {
+      // Move to next position
+      const establishment = this.state.establishments.find(e => e.id === this.recruitmentState!.establishmentId);
+      if (establishment) {
+        const buildingCosts = BUILDING_COSTS[establishment.buildingType.toLowerCase()];
+        if (buildingCosts) {
+          this.recruitmentState.currentOccupation = buildingCosts.staffRequired[this.recruitmentState.currentPosition].occupation;
+          this.recruitmentState.candidates = CandidateGenerator.generateCandidates(this.recruitmentState.currentOccupation);
+          this.recruitmentState.freeRerollsUsed = 0;
+        }
+      }
+    }
+  }
+
+  private completeRecruitment(): void {
+    if (!this.recruitmentState) return;
+
+    const establishment = this.state.establishments.find(e => e.id === this.recruitmentState!.establishmentId);
+    if (establishment) {
+      establishment.isOpen = true;
+      establishment.state = 'deserted'; // Reset to normal state
+    }
+
+    Logger.info('GAME', 'Recruitment completed', {
+      establishmentId: this.recruitmentState.establishmentId,
+      totalPositions: this.recruitmentState.totalPositions,
+    });
+
+    // Clear recruitment state
+    this.recruitmentState = null;
   }
 
   private createInitialStateFallback(): GameState {
@@ -516,7 +708,8 @@ export class GameEngine {
     }
 
     est.entrance = { x: entranceCol + 0.5, y: entranceRow + 0.5 };
-    est.isOpen = true;
+    est.isOpen = false; // Start closed until recruitment complete
+    est.state = 'closed';
 
     // Deduct building cost
     this.deductMoney(buildingCosts.buildCost, 'building_purchase');
@@ -525,10 +718,10 @@ export class GameEngine {
     this.establishmentGridPositions.set(est.id, { gridX, gridY });
     this.gridManager.markEstablishmentFootprint(est, est.entrance);
             
-    // Create staff for the new establishment
-    this.createStaffForEstablishment(est.id);
+    // Start recruitment process instead of auto-hiring
+    this.startRecruitment(est.id);
 
-    Logger.info('GAME', 'Building construction successful', {
+    Logger.info('GAME', 'Building construction successful - recruitment started', {
       establishmentId: est.id,
       buildingType: est.buildingType,
       position: { row, col },

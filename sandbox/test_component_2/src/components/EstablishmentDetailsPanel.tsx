@@ -1,12 +1,41 @@
 import React from 'react';
 import { Establishment } from '../types';
+import { BUILDING_COSTS } from '../types';
 
 interface EstablishmentDetailsPanelProps {
   establishment: Establishment | null;
   onClose: () => void;
+  onStartRecruitment?: (establishmentId: string) => void;
+  gameState?: any;
 }
 
-export const EstablishmentDetailsPanel: React.FC<EstablishmentDetailsPanelProps> = ({ establishment, onClose }) => {
+export const EstablishmentDetailsPanel: React.FC<EstablishmentDetailsPanelProps> = ({ 
+  establishment, 
+  onClose, 
+  onStartRecruitment, 
+  gameState 
+}) => {
+  const canStartRecruitment = () => {
+    if (!establishment || !gameState || !onStartRecruitment) return false;
+    
+    // Check if establishment is closed and has staffing issues
+    if (establishment.isOpen) return false;
+    
+    // Check if establishment has missing staff
+    const buildingCosts = BUILDING_COSTS[establishment.buildingType.toLowerCase()];
+    if (!buildingCosts || buildingCosts.staffRequired.length === 0) return false;
+    
+    const currentStaff = gameState.staff.filter((s: any) => s.establishmentId === establishment.id);
+    const requiredStaff = buildingCosts.staffRequired.length;
+    
+    return currentStaff.length < requiredStaff;
+  };
+
+  const handleStartRecruitment = () => {
+    if (establishment && onStartRecruitment) {
+      onStartRecruitment(establishment.id);
+    }
+  };
   if (!establishment) {
     return (
       <div style={styles.emptyState}>
@@ -98,6 +127,23 @@ export const EstablishmentDetailsPanel: React.FC<EstablishmentDetailsPanelProps>
             <span style={styles.value}>${establishment.totalRevenue.toFixed(0)}</span>
           </div>
         </div>
+
+        {/* Recruitment Section */}
+        {canStartRecruitment() && (
+          <div style={styles.section}>
+            <h4 style={styles.sectionTitle}>Staff Management</h4>
+            <div style={styles.recruitmentAlert}>
+              <span style={styles.alertIcon}>⚠️</span>
+              <span style={styles.alertText}>Establishment needs staff to operate</span>
+            </div>
+            <button 
+              style={styles.recruitmentButton}
+              onClick={handleStartRecruitment}
+            >
+              🎯 Start Recruitment
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -203,6 +249,36 @@ const styles: Record<string, React.CSSProperties> = {
   },
   emptyHint: {
     fontSize: '12px',
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.6)',
+  },
+  recruitmentAlert: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    border: '1px solid rgba(255, 152, 0, 0.3)',
+    marginBottom: '12px',
+  },
+  alertIcon: {
+    fontSize: '16px',
+  },
+  alertText: {
+    fontSize: '12px',
+    color: '#FF9800',
+    fontWeight: '500',
+  },
+  recruitmentButton: {
+    width: '100%',
+    padding: '12px',
+    border: '2px solid #4CAF50',
+    borderRadius: '8px',
+    backgroundColor: '#4CAF50',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
   },
 };

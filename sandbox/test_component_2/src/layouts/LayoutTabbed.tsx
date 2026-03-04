@@ -17,6 +17,7 @@ interface LayoutTabbedProps {
   gameState?: GameState | null;
   gridManager?: any;
   onTryBuild?: (row: number, col: number, building: { icon: string; name: string; price: string }, rotation: number) => boolean;
+  onStartRecruitment?: (establishmentId: string) => void;
 }
 
 type Tab = 'game' | 'build' | 'manage';
@@ -45,7 +46,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   terrainMap,
   gameState,
   gridManager,
-  onTryBuild
+  onTryBuild,
+  onStartRecruitment
 }) => {
   const [activeTab, setActiveTab] = useState<Tab | null>('game');
   const [openDrawer, setOpenDrawer] = useState<DrawerType>(null);
@@ -458,6 +460,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               setSelectedEstablishmentId={setSelectedEstablishmentId}
               isDrawerExpanded={isDrawerExpanded}
               toggleDrawerExpansion={toggleDrawerExpansion}
+              onStartRecruitment={onStartRecruitment}
             />
           </div>
         )}
@@ -491,6 +494,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               setSelectedEstablishmentId={setSelectedEstablishmentId}
               isDrawerExpanded={isDrawerExpanded}
               toggleDrawerExpansion={toggleDrawerExpansion}
+              onStartRecruitment={onStartRecruitment}
             />
           )}
         </div>
@@ -720,7 +724,8 @@ const DrawerContent: React.FC<{
   setSelectedEstablishmentId?: (id: string | null) => void;
   isDrawerExpanded?: boolean;
   toggleDrawerExpansion?: () => void;
-}> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId, selectedEstablishment, setSelectedEstablishmentId, isDrawerExpanded, toggleDrawerExpansion }) => {
+  onStartRecruitment?: (establishmentId: string) => void;
+}> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId, selectedEstablishment, setSelectedEstablishmentId, isDrawerExpanded, toggleDrawerExpansion, onStartRecruitment }) => {
   const getContent = () => {
     switch (type) {
       case 'statistics':
@@ -859,6 +864,8 @@ const DrawerContent: React.FC<{
                   <EstablishmentDetailsPanel
                     establishment={selectedEstablishment}
                     onClose={() => setSelectedEstablishmentId && setSelectedEstablishmentId(null)}
+                    onStartRecruitment={onStartRecruitment}
+                    gameState={gameState}
                   />
                   <div style={styles.divider} />
                   {/* Show staff for selected establishment */}
