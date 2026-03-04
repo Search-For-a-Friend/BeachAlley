@@ -424,4 +424,122 @@ AFTER each response that includes code changes:
 
 ---
 
+## 9. **Comprehensive Logging Strategy Implementation**
+
+**Issue**: During development, there was insufficient visibility into game operations, making debugging difficult. User requested comprehensive logging to track all critical operations.
+
+**Solution Implemented**: Full logging system with categories, levels, and performance monitoring.
+
+**Logging System Architecture**:
+```
+Categories:
+├─ SYS: System operations and lifecycle
+├─ GAME: Game mechanics and state changes  
+├─ UI: User interactions and interface events
+├─ PERF: Performance metrics and timing
+└─ ERROR: Exceptions and failures
+
+Levels:
+├─ TRACE: Detailed execution flow
+├─ DEBUG: Development information
+├─ INFO: General operational information
+├─ WARN: Warning conditions
+├─ ERROR: Error conditions
+└─ FATAL: Critical failures
+```
+
+**Critical Logging Points Implemented**:
+1. **Game Engine Lifecycle**
+   - Engine initialization and startup
+   - Grid manager creation
+   - Game ready state
+
+2. **Money System Operations**
+   - All financial transactions (add/deduct)
+   - Transaction types and amounts
+   - Balance changes and win/lose conditions
+
+3. **Building Management**
+   - Building placement attempts and results
+   - Success/failure reasons
+   - Construction completion
+
+4. **Staff Management**
+   - Staff creation and assignments
+   - Daily cost calculations
+   - Establishment staffing levels
+
+5. **Customer Behavior**
+   - Payment processing
+   - Revenue tracking
+   - Establishment interactions and leave reasons
+
+6. **UI Interactions**
+   - Building selection events
+   - Drawer operations
+   - Navigation actions
+
+7. **Performance Monitoring**
+   - Memory usage tracking
+   - Operation timing
+   - Performance bottlenecks
+
+**Configuration by Environment**:
+```
+Development:
+- Level: DEBUG
+- Categories: ALL
+- Console: YES
+- File: NO
+
+Production:
+- Level: WARN  
+- Categories: ERROR only
+- Console: NO
+- File: YES
+
+Testing:
+- Level: ERROR
+- Categories: ERROR only
+- Console: YES
+- File: NO
+```
+
+**Log Format**:
+```
+[timestamp] [level] [category] message | data
+Example: [2024-02-18T19:52:15.123Z] [INFO] [GAME] Money transaction | {"type":"add","amount":500,"transactionType":"customer_revenue"}
+```
+
+**Benefits Achieved**:
+- ✅ Complete visibility into game state changes
+- ✅ Real-time debugging of issues
+- ✅ Performance monitoring capabilities
+- ✅ User behavior tracking
+- ✅ Error detection and reporting
+- ✅ Transaction audit trail
+
+**Usage Guidelines**:
+- Use appropriate log levels (DEBUG for development, INFO for operations)
+- Include relevant data context in log entries
+- Avoid excessive logging in production
+- Monitor performance impact of logging
+- Use structured data for machine processing
+
+**Implementation Files**:
+- `src/utils/Logger.ts` - Core logging system
+- Integrated throughout GameEngine, UI components, and App initialization
+- Configurable by environment with automatic level filtering
+
+**Why This Matters**:
+- Provides immediate visibility into what's happening in the game
+- Enables rapid debugging of complex interactions
+- Tracks user behavior for UX improvements
+- Monitors performance for optimization opportunities
+- Creates audit trail for financial operations
+
+**Updated Rule**: Comprehensive logging should be implemented early in development, not as afterthought. Log at critical decision points and state changes to provide complete system visibility.
+
+---
+
 *This document should be reviewed at the start of each session and updated with new learnings.*

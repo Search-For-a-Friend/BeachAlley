@@ -667,7 +667,6 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           
           // Draw path ONLY if hovered or selected
           if ((isHovered || isSelected) && g.path && g.path.length > 0) {
-            console.log(`Drawing path for group ${g.id}, path length: ${g.path.length}`);
             drawPath(ctx, g.path, g.color, cameraSystem);
           }
           

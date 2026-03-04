@@ -36,6 +36,7 @@ import { Pathfinder } from './Pathfinder';
 import { TerrainMap } from '../types/environment';
 import { tileKey } from '../utils/terrainGeneration';
 import { CANVAS_CONFIG } from '../canvas/config';
+import Logger from '../utils/Logger';
 
 export type EventCallback = (event: GameEvent) => void;
 
@@ -121,13 +122,21 @@ export class GameEngine {
   private spawnTiles: Vector2[] = [];
 
   constructor(config: Partial<GameConfig> = {}, terrainMap?: TerrainMap) {
+    Logger.info('SYS', 'Game engine initializing');
+    
     this.config = { ...DEFAULT_CONFIG, ...config };
     const width = terrainMap ? terrainMap.width : 20;
     const height = terrainMap ? terrainMap.height : 20;
     this.gridManager = new GridManager(width, height);
     this.pathfinder = new Pathfinder();
     this.terrainMap = terrainMap;
+    
+    Logger.debug('SYS', 'Grid manager created', { width, height });
+    
     this.state = terrainMap ? this.createInitialStateFromTerrain(terrainMap) : this.createInitialStateFallback();
+    
+    Logger.info('SYS', 'Game engine initialization completed');
+    Logger.info('SYS', 'Game ready - player can start');
   }
 
   // Money Management Methods
@@ -140,22 +149,48 @@ export class GameEngine {
   }
 
   public addMoney(amount: number, transactionType: TransactionType): void {
+    const oldBalance = this.state.money;
     this.state.money += amount;
     if (transactionType === 'customer_revenue') {
       this.state.totalRevenue += amount;
     }
+    
+    Logger.info('GAME', 'Money transaction', {
+      type: 'add',
+      amount,
+      transactionType,
+      oldBalance,
+      newBalance: this.state.money,
+    });
+    
     this.emit({ type: 'MONEY_CHANGED', amount, transactionType, newBalance: this.state.money });
     this.checkWinLoseConditions();
   }
 
   public deductMoney(amount: number, transactionType: TransactionType): boolean {
     if (!this.canAfford(amount)) {
+      Logger.warn('GAME', 'Insufficient funds for transaction', {
+        amount,
+        transactionType,
+        currentBalance: this.state.money,
+      });
       return false;
     }
+    
+    const oldBalance = this.state.money;
     this.state.money -= amount;
     if (transactionType === 'daily_operations' || transactionType === 'building_purchase') {
       this.state.totalExpenses += amount;
     }
+    
+    Logger.info('GAME', 'Money transaction', {
+      type: 'deduct',
+      amount,
+      transactionType,
+      oldBalance,
+      newBalance: this.state.money,
+    });
+    
     this.emit({ type: 'MONEY_CHANGED', amount: -amount, transactionType, newBalance: this.state.money });
     this.checkWinLoseConditions();
     return true;
@@ -190,13 +225,24 @@ export class GameEngine {
   public createStaffForEstablishment(establishmentId: string): Staff[] {
     const establishment = this.state.establishments.find(e => e.id === establishmentId);
     if (!establishment) {
+      Logger.error('GAME', 'Establishment not found for staff creation', { establishmentId });
       return [];
     }
 
     const buildingCosts = BUILDING_COSTS[establishment.buildingType.toLowerCase()];
     if (!buildingCosts) {
+      Logger.error('GAME', 'Building costs not found', { 
+        buildingType: establishment.buildingType.toLowerCase(),
+        availableTypes: Object.keys(BUILDING_COSTS)
+      });
       return [];
     }
+
+    Logger.debug('GAME', 'Creating staff for establishment', {
+      establishmentId,
+      buildingType: establishment.buildingType,
+      staffRequirements: buildingCosts.staffRequired,
+    });
 
     const newStaff: Staff[] = [];
     let totalStaffCost = 0;
@@ -213,6 +259,14 @@ export class GameEngine {
         };
         newStaff.push(staff);
         totalStaffCost += staffReq.dailyCost;
+        
+        Logger.debug('GAME', 'Staff member created', {
+          id: staff.id,
+          name: staff.name,
+          occupation: staff.occupation,
+          dailyCost: staff.dailyCost,
+          efficiency: staff.efficiency,
+        });
       }
     });
 
@@ -222,6 +276,14 @@ export class GameEngine {
     // Update establishment with staff IDs and daily cost
     establishment.staffIds = newStaff.map(s => s.id);
     establishment.dailyStaffCost = totalStaffCost;
+
+    Logger.info('GAME', 'Staff creation completed', {
+      establishmentId,
+      buildingType: establishment.buildingType,
+      staffCount: newStaff.length,
+      totalDailyCost: totalStaffCost,
+      totalStaffInGame: this.state.staff.length,
+    });
 
     return newStaff;
   }
@@ -368,11 +430,25 @@ export class GameEngine {
     _building: { icon: string; name: string; price: string },
     rotation: number = 0
   ): boolean {
-    if (!this.terrainMap) return false;
+    Logger.info('GAME', 'Building placement attempt', {
+      buildingName: _building.name,
+      position: { row, col },
+      rotation,
+    });
+
+    if (!this.terrainMap) {
+      Logger.warn('GAME', 'No terrain map available for building');
+      return false;
+    }
 
     // Check if player can afford the building
     const buildingCosts = BUILDING_COSTS[_building.name.toLowerCase()];
     if (!buildingCosts || !this.canAfford(buildingCosts.buildCost)) {
+      Logger.warn('GAME', 'Building purchase failed - insufficient funds or invalid building', {
+        buildingName: _building.name,
+        buildCost: buildingCosts?.buildCost,
+        currentMoney: this.state.money,
+      });
       return false;
     }
 
@@ -451,6 +527,14 @@ export class GameEngine {
             
     // Create staff for the new establishment
     this.createStaffForEstablishment(est.id);
+
+    Logger.info('GAME', 'Building construction successful', {
+      establishmentId: est.id,
+      buildingType: est.buildingType,
+      position: { row, col },
+      entrance: est.entrance,
+      totalEstablishments: this.state.establishments.length,
+    });
 
     this.emit({ type: 'STATE_CHANGED', establishmentId: est.id, from: 'deserted', to: est.state as EstablishmentState });
     return true;
@@ -704,6 +788,17 @@ export class GameEngine {
           
           // Update establishment's total revenue
           est.totalRevenue += customerRevenue;
+          
+          Logger.info('GAME', 'Customer payment processed', {
+            groupId: group.id,
+            establishmentId: est.id,
+            buildingType: est.buildingType,
+            groupSize: group.size,
+            customerSpending: buildingCosts.customerSpending,
+            totalRevenue: customerRevenue,
+            establishmentTotalRevenue: est.totalRevenue,
+            leaveReason: reason,
+          });
         }
         
         group.targetPosition = this.getExitSpawnTile();

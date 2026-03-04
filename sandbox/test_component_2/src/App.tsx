@@ -7,16 +7,28 @@ import { EnvironmentType, TerrainMap } from './types/environment';
 import { EnvironmentGenerator } from './systems/EnvironmentGenerator';
 import { MAP_CONFIG } from './canvas/config';
 import { ENVIRONMENTS } from './data/environments';
+import Logger from './utils/Logger';
 
 type Screen = 'splash' | 'menu' | 'environmentSelection' | 'game';
 
 function App() {
+  // Initialize logging system
+  Logger.setEnvironment('development');
+  Logger.info('SYS', 'Application starting');
+  
   const [currentScreen, setCurrentScreen] = useState<Screen>('splash');
   const [terrainMap, setTerrainMap] = useState<TerrainMap | null>(null);
   const [selectedEnvironmentName, setSelectedEnvironmentName] = useState<string>('');
 
-  const handleSplashComplete = () => setCurrentScreen('menu');
-  const handleStartGame = () => setCurrentScreen('environmentSelection');
+  const handleSplashComplete = () => {
+    Logger.info('UI', 'Splash screen completed, navigating to menu');
+    setCurrentScreen('menu');
+  };
+  
+  const handleStartGame = () => {
+    Logger.info('UI', 'Starting game, navigating to environment selection');
+    setCurrentScreen('environmentSelection');
+  };
 
   const handleSelectEnvironment = (type: EnvironmentType) => {
     const generator = new EnvironmentGenerator(MAP_CONFIG.ROWS, MAP_CONFIG.COLS, Date.now());

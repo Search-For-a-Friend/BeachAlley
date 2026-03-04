@@ -6,6 +6,7 @@ import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
 import { GroupDetailsPanel } from '../components/GroupDetailsPanel';
 import { EstablishmentDetailsPanel } from '../components/EstablishmentDetailsPanel';
 import { getBuildingCapacity } from '../game/engine';
+import Logger from '../utils/Logger';
 
 interface LayoutTabbedProps {
   onBack: () => void;
@@ -122,6 +123,12 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   };
 
   const toggleDrawer = (drawer: DrawerType) => {
+    Logger.info('UI', 'Drawer toggle', {
+      drawerType: drawer,
+      currentDrawer: openDrawer,
+      action: openDrawer === drawer ? 'closing' : 'opening',
+    });
+    
     if (openDrawer === drawer) {
       // Closing the current drawer
       setOpenDrawer(null);
@@ -146,6 +153,13 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   };
 
   const handleBuildingSelect = (building: BuildingInfo) => {
+    Logger.info('UI', 'Building selection', {
+      buildingName: building.name,
+      buildingPrice: building.price,
+      previouslySelected: selectedBuilding?.name,
+      action: selectedBuilding?.name === building.name ? 'deselected' : 'selected',
+    });
+    
     if (selectedBuilding?.name === building.name) {
       setSelectedBuilding(null);
     } else {
