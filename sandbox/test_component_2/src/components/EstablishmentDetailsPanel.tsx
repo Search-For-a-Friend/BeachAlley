@@ -6,6 +6,7 @@ interface EstablishmentDetailsPanelProps {
   establishment: Establishment | null;
   onClose: () => void;
   onStartRecruitment?: (establishmentId: string) => void;
+  onDestroyBuilding?: (establishmentId: string) => void;
   gameState?: any;
 }
 
@@ -13,8 +14,29 @@ export const EstablishmentDetailsPanel: React.FC<EstablishmentDetailsPanelProps>
   establishment, 
   onClose, 
   onStartRecruitment, 
+  onDestroyBuilding,
   gameState 
 }) => {
+  const getDestructionCost = () => {
+    if (!establishment) return 0;
+    const buildingCosts = BUILDING_COSTS[establishment.buildingType.toLowerCase()];
+    if (!buildingCosts) return 0;
+    return Math.round(buildingCosts.buildCost * 0.25);
+  };
+
+  const canDestroyBuilding = () => {
+    if (!establishment || !gameState || !onDestroyBuilding) return false;
+    const destructionCost = getDestructionCost();
+    return gameState.money >= destructionCost;
+  };
+
+  const handleDestroyBuilding = () => {
+    if (establishment && onDestroyBuilding) {
+      if (window.confirm(`Are you sure you want to destroy this ${establishment.buildingType}? This will cost $${getDestructionCost()} and remove all staff.`)) {
+        onDestroyBuilding(establishment.id);
+      }
+    }
+  };
   const canStartRecruitment = () => {
     if (!establishment || !gameState || !onStartRecruitment) return false;
     
@@ -144,6 +166,25 @@ export const EstablishmentDetailsPanel: React.FC<EstablishmentDetailsPanelProps>
             </button>
           </div>
         )}
+
+        {/* Building Destruction Section */}
+        <div style={styles.section}>
+          <h4 style={styles.sectionTitle}>Building Management</h4>
+          <div style={styles.destructionAlert}>
+            <span style={styles.alertIcon}>⚠️</span>
+            <span style={styles.alertText}>Destroying this building will remove all staff</span>
+          </div>
+          <button 
+            style={{
+              ...styles.destructionButton,
+              ...(canDestroyBuilding() ? {} : styles.destructionButtonDisabled)
+            }}
+            onClick={handleDestroyBuilding}
+            disabled={!canDestroyBuilding()}
+          >
+            💥 Destroy Building (${getDestructionCost()})
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -280,5 +321,31 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 'bold',
     cursor: 'pointer',
     transition: 'all 0.2s',
+  },
+  destructionAlert: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px',
+    borderRadius: '8px',
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    border: '1px solid rgba(244, 67, 54, 0.3)',
+    marginBottom: '12px',
+  },
+  destructionButton: {
+    width: '100%',
+    padding: '12px',
+    border: '2px solid #f44336',
+    borderRadius: '8px',
+    backgroundColor: '#f44336',
+    color: '#fff',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  destructionButtonDisabled: {
+    opacity: 0.5,
+    cursor: 'not-allowed',
   },
 };

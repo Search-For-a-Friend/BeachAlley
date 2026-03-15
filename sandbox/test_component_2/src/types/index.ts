@@ -130,7 +130,7 @@ export const DEFAULT_CONFIG: GameConfig = {
   moneyPerSecond: 5,
 };
 
-export type TransactionType = 'building_purchase' | 'daily_operations' | 'customer_revenue' | 'game_start';
+export type TransactionType = 'building_purchase' | 'daily_operations' | 'customer_revenue' | 'game_start' | 'building_destruction';
 
 export interface BuildingCosts {
   buildCost: number;

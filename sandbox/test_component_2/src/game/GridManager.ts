@@ -100,6 +100,19 @@ export class GridManager {
     this.setTileType(Math.floor(entrancePos.x), Math.floor(entrancePos.y), 'entrance');
   }
 
+  clearEstablishment(gridPosition: Vector2, maxCapacity: number): void {
+    const centerX = Math.floor(gridPosition.x);
+    const centerY = Math.floor(gridPosition.y);
+    const size = maxCapacity <= 4 ? 1 : maxCapacity <= 8 ? 2 : 3;
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        const tileX = centerX + dx - Math.floor(size / 2);
+        const tileY = centerY + dy - Math.floor(size / 2);
+        this.setTileType(tileX, tileY, 'path'); // Reset to path/walkable
+      }
+    }
+  }
+
   getAllTiles(): Tile[][] {
     return this.grid;
   }

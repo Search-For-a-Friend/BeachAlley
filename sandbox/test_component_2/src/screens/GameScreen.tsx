@@ -90,6 +90,18 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     }
   };
 
+  const handleDestroyBuilding = (establishmentId: string) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    
+    const success = engine.destroyEstablishment(establishmentId);
+    if (success) {
+      setGameState(engine.getState());
+      // Close the establishment drawer since the building no longer exists
+      // This will be handled by the LayoutTabbed component
+    }
+  };
+
   useEffect(() => {
     const engine = new GameEngine(
       { canvasWidth: 800, canvasHeight: 600 },
@@ -136,6 +148,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         gridManager={engineRef.current?.getGridManager()}
         onTryBuild={handleTryBuild}
         onStartRecruitment={handleStartRecruitmentFromDrawer}
+        onDestroyBuilding={handleDestroyBuilding}
       />
       
       {/* Recruitment Modal */}

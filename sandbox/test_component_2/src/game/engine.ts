@@ -362,6 +362,84 @@ export class GameEngine {
     });
   }
 
+  // Building Destruction Methods
+  public getDestructionCost(buildingType: string): number {
+    const buildingCosts = BUILDING_COSTS[buildingType.toLowerCase()];
+    if (!buildingCosts) return 0;
+    
+    // Destruction cost is 25% of the original building cost
+    return Math.round(buildingCosts.buildCost * 0.25);
+  }
+
+  public canDestroyEstablishment(establishmentId: string): boolean {
+    const establishment = this.state.establishments.find(e => e.id === establishmentId);
+    if (!establishment) return false;
+
+    const destructionCost = this.getDestructionCost(establishment.buildingType);
+    return this.canAfford(destructionCost);
+  }
+
+  public destroyEstablishment(establishmentId: string): boolean {
+    const establishment = this.state.establishments.find(e => e.id === establishmentId);
+    if (!establishment) {
+      Logger.error('GAME', 'Cannot destroy establishment - not found', { establishmentId });
+      return false;
+    }
+
+    const destructionCost = this.getDestructionCost(establishment.buildingType);
+    if (!this.canAfford(destructionCost)) {
+      Logger.warn('GAME', 'Cannot afford destruction', { 
+        establishmentId, 
+        cost: destructionCost,
+        currentMoney: this.state.money 
+      });
+      return false;
+    }
+
+    // Remove all staff assigned to this establishment
+    const staffToRemove = this.state.staff.filter(s => s.establishmentId === establishmentId);
+    staffToRemove.forEach(staff => {
+      const staffIndex = this.state.staff.findIndex(s => s.id === staff.id);
+      if (staffIndex !== -1) {
+        this.state.staff.splice(staffIndex, 1);
+        Logger.info('GAME', 'Staff removed during building destruction', {
+          establishmentId,
+          staffId: staff.id,
+          name: staff.name,
+          occupation: staff.occupation,
+        });
+      }
+    });
+
+    // Clear establishment grid position
+    if (establishment.gridPosition) {
+      this.gridManager.clearEstablishment(establishment.gridPosition, establishment.maxCapacity);
+    }
+    this.establishmentGridPositions.delete(establishmentId);
+
+    // Remove establishment from state
+    const establishmentIndex = this.state.establishments.findIndex(e => e.id === establishmentId);
+    if (establishmentIndex !== -1) {
+      this.state.establishments.splice(establishmentIndex, 1);
+    }
+
+    // Deduct destruction cost
+    this.deductMoney(destructionCost, 'building_destruction');
+
+    Logger.info('GAME', 'Building destroyed', {
+      establishmentId,
+      buildingType: establishment.buildingType,
+      destructionCost,
+      staffRemoved: staffToRemove.length,
+      totalEstablishments: this.state.establishments.length,
+    });
+
+    // Check win/lose conditions
+    this.checkWinLoseConditions();
+
+    return true;
+  }
+
   public generateCandidates(occupation: string, premium: boolean = false): StaffCandidate[] {
     return CandidateGenerator.generateCandidates(occupation, premium);
   }
