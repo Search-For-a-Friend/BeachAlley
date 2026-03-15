@@ -1,0 +1,38 @@
+{
+  "name": "house",
+  "type": "establishment",
+  "description": "Basic beach house establishment",
+  "spritesheet": "spritesheet.svg",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "anchorX": 0.5,
+  "anchorY": 0.8,
+  "animationSpeed": 750,
+  "states": {
+    "closed": {
+      "row": 0,
+      "frames": 2,
+      "description": "Establishment is closed, lights off"
+    },
+    "deserted": {
+      "row": 1,
+      "frames": 2,
+      "description": "Open but no visitors"
+    },
+    "visited": {
+      "row": 2,
+      "frames": 2,
+      "description": "Some activity, 1-49% capacity"
+    },
+    "busy": {
+      "row": 3,
+      "frames": 2,
+      "description": "Lots of activity, 50-89% capacity"
+    },
+    "crowded": {
+      "row": 4,
+      "frames": 2,
+      "description": "Packed, 90-100% capacity"
+    }
+  }
+}

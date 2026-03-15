@@ -1,0 +1,35 @@
+{
+  "name": "small_group",
+  "type": "people",
+  "category": "small_group",
+  "description": "Small group of 2-5 people",
+  "groupSizeRange": [2, 5],
+  "spritesheet": "spritesheet.svg",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "anchorX": 0.5,
+  "anchorY": 0.9,
+  "animationSpeed": 300,
+  "states": {
+    "look_down": {
+      "row": 0,
+      "frames": 2,
+      "description": "Group facing camera/south"
+    },
+    "look_up": {
+      "row": 1,
+      "frames": 2,
+      "description": "Group facing away/north"
+    },
+    "look_side": {
+      "row": 2,
+      "frames": 2,
+      "description": "Group facing left or right"
+    }
+  },
+  "variants": [
+    { "name": "couple", "column": 0 },
+    { "name": "family", "column": 1 },
+    { "name": "friends", "column": 2 }
+  ]
+}

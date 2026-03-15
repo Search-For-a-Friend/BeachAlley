@@ -1,0 +1,1 @@
+export { GroupDetailsPanel } from './GroupDetailsPanel';
