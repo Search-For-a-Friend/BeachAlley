@@ -19,7 +19,7 @@ import {
 } from './peopleGroup';
 import { distance, moveTowards } from './utils';
 import { GridManager } from './GridManager';
-import { Pathfinder } from './Pathfinder';
+import { GroupBehavior } from './GroupBehavior';
 import { TerrainMap } from '../types/environment';
 import Logger from '../utils/Logger';
 
@@ -50,18 +50,23 @@ export class GameEngine {
   private config: GameConfig;
   private eventCallbacks: EventCallback[] = [];
   private gridManager: GridManager;
-  private pathfinder: Pathfinder;
+  private groupBehavior: GroupBehavior;
   private terrainMap: TerrainMap;
   private lastSpawnTime: number = 0;
   private animationFrameId: number | null = null;
   /** Spawn tile centers (x, y) for exit and spawn. */
   private spawnTiles: Vector2[] = [];
+  /** Event queue for buffering events */
+  private eventQueue: GameEvent[] = [];
 
   constructor(config: Partial<GameConfig>, terrainMap: TerrainMap) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.terrainMap = terrainMap;
     this.gridManager = new GridManager(this.terrainMap.width, this.terrainMap.height);
-    this.pathfinder = new Pathfinder();
+    this.groupBehavior = new GroupBehavior({
+      settlementDuration: 10000, // 10 seconds
+      settlementRequirements: {} // No requirements for now
+    });
     this.state = this.createInitialState();
     this.initializeGrid();
     this.generateSpawnTile();
@@ -104,7 +109,17 @@ export class GameEngine {
       this.gridManager.setTileType(spawnTile.col, spawnTile.row, 'spawn');
       this.spawnTiles.push({ x: spawnTile.col + 0.5, y: spawnTile.row + 0.5 });
       Logger.info('GAME', 'Spawn tile generated', { position: spawnTile });
+      
+      // Automatically center on spawn tile after generation
+      this.centerViewportOnSpawn();
     }
+  }
+
+  centerViewportOnSpawn(): void {
+    if (this.spawnTiles.length === 0) return;
+    
+    const spawnTile = this.spawnTiles[0]; // Use first spawn tile
+    this.on({ type: 'CENTER_ON_SPAWN', tileX: spawnTile.x, tileY: spawnTile.y });
   }
 
   getSpawnTile(): Vector2 {
@@ -168,12 +183,9 @@ export class GameEngine {
     return this.gridManager;
   }
 
-  public getPathfinder(): Pathfinder {
-    return this.pathfinder;
-  }
-
+  
   public on(event: GameEvent): void {
-    this.eventCallbacks.forEach(callback => callback(event));
+    this.eventQueue.push(event);
   }
 
   public addEventListener(callback: EventCallback): void {
@@ -184,6 +196,13 @@ export class GameEngine {
     const index = this.eventCallbacks.indexOf(callback);
     if (index > -1) {
       this.eventCallbacks.splice(index, 1);
+    }
+  }
+
+  private processEventQueue(): void {
+    while (this.eventQueue.length > 0 && this.eventCallbacks.length > 0) {
+      const event = this.eventQueue.shift()!;
+      this.eventCallbacks.forEach(callback => callback(event));
     }
   }
 
@@ -202,11 +221,17 @@ export class GameEngine {
 
     this.state.time += deltaTime;
 
+    // Process event queue first
+    this.processEventQueue();
+
     // Spawn new groups
     this.updateSpawning();
 
     // Update existing groups
     this.updateGroups(deltaTime);
+
+    // Update settled groups
+    this.groupBehavior.updateSettledGroups(this.state.groups, this.state.time);
 
     // Clean up despawned groups
     this.cleanupGroups();
@@ -228,6 +253,7 @@ export class GameEngine {
     
     const spawnPos = this.getSpawnTile();
     const group = createPeopleGroup(spawnPos, this.config);
+    group.spawnTime = this.state.time; // Set spawn time to current game time
     this.state.groups.push(group);
     this.state.stats.totalGroupsSpawned++;
 
@@ -250,63 +276,104 @@ export class GameEngine {
         break;
 
       case 'idle':
-        // Random wandering
-        if (Math.random() < 0.01) {
+        if (!this.isOnSand(group)) {
+          // Aim for closest sand tile when not on sand
+          const closestSand = this.findClosestSandTile(group.position);
+          if (closestSand) {
+            group.targetPosition = closestSand;
+            setGroupState(group, 'seeking');
+          }
+        } else {
+          // Once on sand, wander freely
+          const targetPos = this.findRandomWalkablePosition(group.position);
+          group.targetPosition = targetPos;
           setGroupState(group, 'wandering');
-          group.targetPosition = this.findRandomWalkablePosition(group.position);
+        }
+        break;
+
+      case 'seeking':
+        // Move towards sand tile
+        if (group.targetPosition) {
+          const reached = this.moveGroupTowards(group, group.targetPosition, deltaTime);
+          if (reached) {
+            group.targetPosition = null;
+            setGroupState(group, 'idle');
+          }
         }
         break;
 
       case 'wandering':
+        // Move freely when on sand
         if (group.targetPosition) {
-          const moved = this.moveGroupTowards(group, group.targetPosition, deltaTime);
-          if (moved) {
-            const dist = distance(group.position, group.targetPosition);
-            if (dist < 0.5) {
-              setGroupState(group, 'idle');
+          const reached = this.moveGroupTowards(group, group.targetPosition, deltaTime);
+          if (reached) {
+            // Check if group can settle here
+            const tileX = Math.floor(group.position.x);
+            const tileY = Math.floor(group.position.y);
+            
+            if (this.groupBehavior.canSettle(tileX, tileY)) {
+              // Settle the group
+              this.groupBehavior.settleGroup(group, tileX, tileY);
+              group.settledAt = this.state.time;
+            } else {
+              // Can't settle, find new target
               group.targetPosition = null;
+              setGroupState(group, 'idle');
             }
           }
         }
         break;
 
-      case 'seeking':
-      case 'queuing':
-      case 'entering':
-      case 'visiting':
+      case 'settled':
+        // Groups don't move when settled
+        break;
+
       case 'leaving':
-        // These states are not used in simplified version
-        setGroupState(group, 'idle');
+        // Move back to spawn to despawn
+        if (!group.targetPosition) {
+          // Set target to spawn if not already set
+          const spawnPos = this.getSpawnTile();
+          group.targetPosition = spawnPos;
+        }
+        
+        if (group.targetPosition) {
+          const reached = this.moveGroupTowards(group, group.targetPosition, deltaTime);
+          if (reached) {
+            group.targetPosition = null;
+            setGroupState(group, 'despawned');
+          }
+        }
         break;
     }
-
-    // Update satisfaction
     group.satisfaction = Math.max(0, group.satisfaction - this.config.satisfactionDecayRate * deltaTime / 1000);
 
     // Update patience
     group.patience = Math.max(0, group.patience - deltaTime / 1000);
 
-    // Check if group should despawn
+    // Check if group should despawn immediately
     if (group.patience <= 0 || group.satisfaction <= 0 || isOutOfBounds(group, this.terrainMap.width, this.terrainMap.height)) {
       setGroupState(group, 'despawned');
     }
   }
 
+  
   private moveGroupTowards(group: PeopleGroup, target: Vector2, deltaTime: number): boolean {
     const oldPos = { ...group.position };
     const speed = group.speed * this.config.groupSpeed;
     const newPos = moveTowards(group.position, target, speed, deltaTime / 1000);
     
+    // Simple movement - just move towards target
     group.position = newPos;
     group.previousPosition = oldPos;
-    
     updateGroupFacing(group);
     
-    return true;
+    // Return true only if the group has reached the target
+    return newPos.x === target.x && newPos.y === target.y;
   }
 
+  
   private findRandomWalkablePosition(from: Vector2): Vector2 {
-    const radius = 5;
+    const radius = 20;
     let attempts = 0;
     
     while (attempts < 20) {
@@ -316,7 +383,7 @@ export class GameEngine {
       const y = Math.round(from.y + Math.sin(angle) * dist);
       
       const tile = this.gridManager.getTile(x, y);
-      if (tile && tile.type === 'path') {
+      if (tile && tile.type === 'path') { // Only wander on sand (path tiles)
         return { x, y };
       }
       
@@ -326,6 +393,33 @@ export class GameEngine {
     return from;
   }
 
+  private findClosestSandTile(from: Vector2): Vector2 | null {
+    let closestTile: Vector2 | null = null;
+    let minDistance = Infinity;
+    
+    // Search through the terrain map for sand tiles
+    this.terrainMap.tiles.forEach((terrainType, key) => {
+      if (terrainType === 'sand') {
+        const [row, col] = key.split(',').map(Number);
+        const tilePos = { x: col + 0.5, y: row + 0.5 };
+        const dist = distance(from, tilePos);
+        
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestTile = tilePos;
+        }
+      }
+    });
+    
+    return closestTile;
+  }
+
+  private isOnSand(group: PeopleGroup): boolean {
+    const tile = this.gridManager.getTile(Math.floor(group.position.x), Math.floor(group.position.y));
+    return tile?.type === 'path'; // Sand tiles are mapped to 'path' in grid
+  }
+
+  
   private cleanupGroups(): void {
     const beforeCount = this.state.groups.length;
     

@@ -15,6 +15,7 @@ export type GroupState =
   | 'queuing'
   | 'entering'
   | 'visiting'
+  | 'settled'
   | 'leaving'
   | 'despawned';
 
@@ -36,6 +37,7 @@ export interface PeopleGroup {
   satisfaction: number;
   money: number;
   spawnTime: number;
+  settledAt: number | null; // Time when group settled
   timeInEstablishment: number;
   color: string;
 }
@@ -81,6 +83,7 @@ export const DEFAULT_CONFIG: GameConfig = {
 export type GameEvent =
   | { type: 'GROUP_SPAWNED'; group: PeopleGroup }
   | { type: 'GROUP_DESPAWNED'; groupId: string }
-  | { type: 'GAME_OVER'; won: boolean; reason: string };
+  | { type: 'GAME_OVER'; won: boolean; reason: string }
+  | { type: 'CENTER_ON_SPAWN'; tileX: number; tileY: number };
 
 export type EventCallback = (event: GameEvent) => void;

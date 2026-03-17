@@ -45,6 +45,83 @@ function getPeopleSpriteState(facingDirection: 'up' | 'down' | 'left' | 'right')
   }
 }
 
+// Add CSS for vertical zoom slider
+const zoomSliderStyles = `
+  input[type="range"] {
+    writing-mode: bt-lr; /* IE */
+    -webkit-appearance: slider-vertical; /* WebKit */
+    width: 30px;
+    height: 120px;
+    background: transparent;
+    outline: none;
+  }
+  
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #00ffff;
+    cursor: pointer;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: #00ffff;
+    cursor: pointer;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  input[type="range"]::-webkit-slider-thumb:hover {
+    background: #00cccc;
+    transform: scale(1.1);
+  }
+  
+  input[type="range"]::-moz-range-thumb:hover {
+    background: #00cccc;
+    transform: scale(1.1);
+  }
+`;
+
+const zoomControlStyles = {
+  zoomControl: {
+    position: 'absolute' as const,
+    top: '20px',
+    left: '20px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px',
+    background: 'rgba(26, 26, 46, 0.95)',
+    borderRadius: '10px',
+    border: '1px solid rgba(0, 255, 255, 0.3)',
+    backdropFilter: 'blur(10px)',
+    zIndex: 1000,
+  },
+  zoomLabel: {
+    fontSize: '0.9rem',
+    color: '#00ffff',
+    textAlign: 'center' as const,
+  },
+  zoomSlider: {
+    WebkitAppearance: 'slider-vertical' as const,
+    width: '30px',
+    height: '120px',
+    background: 'transparent',
+    outline: 'none',
+  },
+  zoomValue: {
+    fontSize: '0.8rem',
+    color: '#fff',
+    textAlign: 'center' as const,
+    minWidth: '40px',
+  },
+};
+
 async function loadSpriteManifest(url: URL): Promise<SpriteManifest> {
   const res = await fetch(url.toString());
   if (!res.ok) {
@@ -92,6 +169,36 @@ function drawPath(ctx: CanvasRenderingContext2D, path: any[], color: string, cam
   ctx.globalAlpha = 1;
 }
 
+function drawTargetHighlight(ctx: CanvasRenderingContext2D, target: any, color: string, cameraSystem: CameraSystem): void {
+  const worldPos = {
+    x: (target.x - target.y) * (CANVAS_CONFIG.TILE_WIDTH / 2),
+    y: (target.x + target.y) * (CANVAS_CONFIG.TILE_HEIGHT / 2)
+  };
+  const screenPos = cameraSystem.worldToScreen(worldPos.x, worldPos.y);
+  
+  // Draw pulsing circle at target
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.8;
+  
+  ctx.beginPath();
+  ctx.arc(screenPos.screenX, screenPos.screenY, 15, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Inner circle
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 1;
+  ctx.beginPath();
+  ctx.arc(screenPos.screenX, screenPos.screenY, 8, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  // Center dot
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(screenPos.screenX, screenPos.screenY, 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function drawGroupStateIndicator(ctx: CanvasRenderingContext2D, group: any, x: number, y: number): void {
   let stateIcon = '';
   let iconColor = '#fff';
@@ -104,6 +211,10 @@ function drawGroupStateIndicator(ctx: CanvasRenderingContext2D, group: any, x: n
     case 'wandering':
       stateIcon = '❓';
       iconColor = '#facc15';
+      break;
+    case 'settled':
+      stateIcon = '🏖️';
+      iconColor = '#06b6d4';
       break;
     case 'leaving':
       stateIcon = '👋';
@@ -152,6 +263,9 @@ export interface InteractiveCanvasProps {
   onGroupHover?: (groupId: string | null) => void;
   gridManager?: any; // GridManager type from game engine
   spawnTilePosition?: { x: number; y: number } | null;
+  zoomLevel?: number;
+  onZoomChange?: (level: number) => void;
+  onCameraSystemRef?: (cameraSystem: any) => void;
 }
 
 export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
@@ -165,6 +279,9 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   onGroupHover,
   gridManager,
   spawnTilePosition,
+  zoomLevel = 100,
+  onZoomChange,
+  onCameraSystemRef,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -173,21 +290,12 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [spritesReady, setSpritesReady] = useState(false);
   const mapDimensions = { rows: terrainMap.height, cols: terrainMap.width };
   const [cameraSystem] = useState<CameraSystem>(() => {
-    const zoom = CANVAS_CONFIG.INITIAL_ZOOM;
+    const zoom = (zoomLevel / 100) * CANVAS_CONFIG.INITIAL_ZOOM;
     const w = initialSize.width;
     const h = initialSize.height;
-    
-    // Center on spawn tile if available, otherwise fall back to sand tile or center
-    let row: number, col: number;
-    if (spawnTilePosition) {
-      row = Math.floor(spawnTilePosition.y);
-      col = Math.floor(spawnTilePosition.x);
-    } else {
-      const sandTile = findSandTileForCenter(terrainMap);
-      row = sandTile?.row ?? terrainMap.height / 2;
-      col = sandTile?.col ?? terrainMap.width / 2;
-    }
-    
+    const sandTile = findSandTileForCenter(terrainMap);
+    const row = sandTile?.row ?? terrainMap.height / 2;
+    const col = sandTile?.col ?? terrainMap.width / 2;
     const worldX = (col - row) * (CANVAS_CONFIG.TILE_WIDTH / 2);
     const worldY = (col + row) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
     const initialCamera: CameraState = {
@@ -197,6 +305,11 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     };
     return new CameraSystem(initialCamera, w, h, mapDimensions);
   });
+
+  useEffect(() => {
+    onCameraSystemRef?.(cameraSystem);
+  }, [cameraSystem, onCameraSystemRef]);
+
   const [tileLoader] = useState<TileLoader>(() => new TileLoader(cameraSystem, terrainMap));
   const inputHandlerRef = useRef<InputHandler | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -364,9 +477,14 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           const isHovered = hoveredGroupId === g.id;
           const isSelected = selectedGroupId === g.id;
           
-          // Draw path ONLY if hovered or selected
-          if ((isHovered || isSelected) && g.path && g.path.length > 0) {
-            drawPath(ctx, g.path, g.color, cameraSystem);
+          // Draw path and target if selected
+          if (isSelected && g.targetPosition) {
+            // Create a simple path from current position to target
+            const simplePath = [g.position, g.targetPosition];
+            drawPath(ctx, simplePath, g.color, cameraSystem);
+            
+            // Draw target highlight
+            drawTargetHighlight(ctx, g.targetPosition, g.color, cameraSystem);
           }
           
           // Don't draw if visiting or despawned
@@ -568,6 +686,12 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     cameraSystem.updateCanvasSize(canvasSize.width, canvasSize.height);
   }, [cameraSystem, canvasSize]);
 
+  // Update zoom level when zoomLevel prop changes
+  useEffect(() => {
+    const newZoom = (zoomLevel / 100) * CANVAS_CONFIG.INITIAL_ZOOM;
+    cameraSystem.setZoom(newZoom);
+  }, [cameraSystem, zoomLevel]);
+
   useEffect(() => {
     // Set up InputHandler callbacks for element interaction
     if (inputHandlerRef.current) {
@@ -577,17 +701,86 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [handleElementClick, handleElementHover]);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <canvas
-        ref={canvasRef}
-        width={canvasSize.width}
-        height={canvasSize.height}
-        style={{
-          display: 'block',
-          cursor: hoveredGroupId ? 'pointer' : 'grab',
-          touchAction: 'none',
-        }}
-      />
-    </div>
+    <>
+      <style>{zoomSliderStyles}</style>
+      <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+        {/* Vertical Zoom Slider */}
+        <div style={zoomControlStyles.zoomControl}>
+          <div style={zoomControlStyles.zoomLabel}>🔍</div>
+          <input
+            type="range"
+            min="10"
+            max="200"
+            value={zoomLevel}
+            onChange={(e) => {
+              const newZoom = Number(e.target.value);
+              onZoomChange?.(newZoom);
+            }}
+            style={zoomControlStyles.zoomSlider}
+            aria-label="Zoom level"
+          />
+          <div style={zoomControlStyles.zoomValue}>{zoomLevel}%</div>
+        </div>
+
+        {/* Center on Spawn Button */}
+        <div style={{
+          position: 'absolute' as const,
+          top: '20px',
+          right: '20px',
+          display: 'flex',
+          flexDirection: 'column' as const,
+          alignItems: 'center',
+          gap: '8px',
+          padding: '10px',
+          background: 'rgba(26, 26, 46, 0.95)',
+          borderRadius: '10px',
+          border: '1px solid rgba(0, 255, 255, 0.3)',
+          backdropFilter: 'blur(10px)',
+          zIndex: 1000,
+        }}>
+          <button
+            onClick={() => {
+              if (spawnTilePosition) {
+                cameraSystem.centerOnTile(spawnTilePosition.x, spawnTilePosition.y);
+              }
+            }}
+            style={{
+              background: 'rgba(0, 255, 255, 0.2)',
+              border: '1px solid rgba(0, 255, 255, 0.5)',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              color: '#00ffff',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 'bold',
+              transition: 'all 0.3s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 255, 255, 0.3)';
+              e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(0, 255, 255, 0.2)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            aria-label="Center on spawn tile"
+          >
+            🏠 Center Spawn
+          </button>
+        </div>
+
+        <canvas
+          ref={canvasRef}
+          width={canvasSize.width}
+          height={canvasSize.height}
+          style={{
+            border: '2px solid rgba(0, 255, 255, 0.3)',
+            borderRadius: '8px',
+            cursor: hoveredGroupId ? 'pointer' : 'grab',
+            background: 'rgba(0, 0, 0, 0.8)',
+          }}
+        />
+      </div>
+    </>
   );
 };

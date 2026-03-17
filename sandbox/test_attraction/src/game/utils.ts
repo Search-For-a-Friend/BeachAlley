@@ -15,16 +15,20 @@ export function moveTowards(
   const dx = target.x - current.x;
   const dy = target.y - current.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
+  
+  // If we're close enough to reach the target, return target position
   if (dist <= speed * deltaTime) return { ...target };
+  
+  // Calculate normalized direction vector for smooth diagonal movement
   const moveDistance = speed * deltaTime;
-  const absDx = Math.abs(dx);
-  const absDy = Math.abs(dy);
-  if (absDx > absDy) {
-    const stepX = Math.sign(dx) * Math.min(moveDistance, absDx);
-    return { x: current.x + stepX, y: current.y };
-  }
-  const stepY = Math.sign(dy) * Math.min(moveDistance, absDy);
-  return { x: current.x, y: current.y + stepY };
+  const normalizedDx = dx / dist;
+  const normalizedDy = dy / dist;
+  
+  // Move in both X and Y directions proportionally
+  const newX = current.x + normalizedDx * moveDistance;
+  const newY = current.y + normalizedDy * moveDistance;
+  
+  return { x: newX, y: newY };
 }
 
 export function generateId(): string {

@@ -272,37 +272,93 @@ export class EnvironmentGenerator {
   }
 
   private applySandGradient(tiles: Map<string, TerrainType>): void {
-    const firstPassChanges: Array<{ key: string }> = [];
+    // First, identify all water tiles adjacent to grass (these will be the start of our sand expansion)
+    const sandExpansionQueue: Array<{ row: number; col: number; distance: number }> = [];
+    const sandDistances = new Map<string, number>();
+    
+    // Find initial sand tiles (water adjacent to grass)
     for (let row = 0; row < this.mapRows; row++) {
       for (let col = 0; col < this.mapCols; col++) {
-        if (tiles.get(tileKey(row, col)) !== 'grass') continue;
+        if (tiles.get(tileKey(row, col)) !== 'water') continue;
+        
+        let hasGrassNeighbor = false;
         for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
           const nRow = row + dr;
           const nCol = col + dc;
-          if (nRow >= 0 && nRow < this.mapRows && nCol >= 0 && nCol < this.mapCols && tiles.get(tileKey(nRow, nCol)) === 'water') {
-            firstPassChanges.push({ key: tileKey(nRow, nCol) });
+          if (nRow >= 0 && nRow < this.mapRows && nCol >= 0 && nCol < this.mapCols && tiles.get(tileKey(nRow, nCol)) === 'grass') {
+            hasGrassNeighbor = true;
+            break;
+          }
+        }
+        
+        if (hasGrassNeighbor) {
+          const key = tileKey(row, col);
+          sandExpansionQueue.push({ row, col, distance: 1 });
+          sandDistances.set(key, 1);
+        }
+      }
+    }
+    
+    // Set initial sand tiles
+    sandExpansionQueue.forEach(({ row, col }) => {
+      tiles.set(tileKey(row, col), 'sand');
+    });
+    
+    // Expand sand to create wider beaches (10-30 tiles wide)
+    const minSandWidth = 5;
+    const maxSandWidth = 23;
+    const targetSandWidth = minSandWidth + Math.floor(this.random.next() * (maxSandWidth - minSandWidth));
+    
+    // BFS expansion from initial sand tiles
+    let queueIndex = 0;
+    while (queueIndex < sandExpansionQueue.length) {
+      const current = sandExpansionQueue[queueIndex++];
+      
+      if (current.distance >= targetSandWidth) continue;
+      
+      // Check all neighbors for expansion
+      for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
+        const nRow = current.row + dr;
+        const nCol = current.col + dc;
+        const nKey = tileKey(nRow, nCol);
+        
+        // Skip if out of bounds or already processed
+        if (nRow < 0 || nRow >= this.mapRows || nCol < 0 || nCol >= this.mapCols || sandDistances.has(nKey)) continue;
+        
+        // Only expand into water tiles
+        if (tiles.get(nKey) === 'water') {
+          // Add some randomness to create more natural beach shapes
+          const expansionChance = 0.7 + (current.distance / targetSandWidth) * 0.3; // Higher chance near grass
+          if (this.random.next() < expansionChance) {
+            tiles.set(nKey, 'sand');
+            sandDistances.set(nKey, current.distance + 1);
+            sandExpansionQueue.push({ row: nRow, col: nCol, distance: current.distance + 1 });
           }
         }
       }
     }
-    firstPassChanges.forEach(({ key }) => tiles.set(key, 'sand'));
-    let randomRate = 0.5;
-    for (let iteration = 0; iteration < 2; iteration++) {
-      const changes: Array<{ key: string }> = [];
-      for (let row = 0; row < this.mapRows; row++) {
-        for (let col = 0; col < this.mapCols; col++) {
-          if (tiles.get(tileKey(row, col)) !== 'sand') continue;
-          for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
-            const nRow = row + dr;
-            const nCol = col + dc;
-            if (nRow >= 0 && nRow < this.mapRows && nCol >= 0 && nCol < this.mapCols && tiles.get(tileKey(nRow, nCol)) === 'water' && this.random.next() < randomRate) {
-              changes.push({ key: tileKey(nRow, nCol) });
-            }
+    
+    // Add some final touches - fill small water pockets within sand areas
+    for (let row = 0; row < this.mapRows; row++) {
+      for (let col = 0; col < this.mapCols; col++) {
+        const key = tileKey(row, col);
+        if (tiles.get(key) !== 'water') continue;
+        
+        // Count sand neighbors
+        let sandNeighborCount = 0;
+        for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
+          const nRow = row + dr;
+          const nCol = col + dc;
+          if (nRow >= 0 && nRow < this.mapRows && nCol >= 0 && nCol < this.mapCols && tiles.get(tileKey(nRow, nCol)) === 'sand') {
+            sandNeighborCount++;
           }
         }
+        
+        // Convert isolated water pockets to sand if surrounded by sand
+        if (sandNeighborCount >= 6) {
+          tiles.set(key, 'sand');
+        }
       }
-      changes.forEach(({ key }) => tiles.set(key, 'sand'));
-      randomRate -= 0.1;
     }
   }
 }

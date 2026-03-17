@@ -1,5 +1,37 @@
 import React from 'react';
 
+// Add CSS for zoom slider thumb
+const zoomSliderStyles = `
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #00ffff;
+    cursor: pointer;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: #00ffff;
+    cursor: pointer;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  input[type="range"]::-webkit-slider-thumb:hover {
+    background: #00cccc;
+    transform: scale(1.1);
+  }
+  
+  input[type="range"]::-moz-range-thumb:hover {
+    background: #00cccc;
+    transform: scale(1.1);
+  }
+`;
+
 interface TopBarProps {
   onBack?: () => void;
   onSettings?: () => void;
@@ -25,8 +57,10 @@ export const TopBar: React.FC<TopBarProps> = ({ onBack, onSettings, title = 'Bea
   };
 
   return (
-    <div style={styles.container}>
-      <button style={styles.button} onClick={onBack} aria-label="Back">◀️</button>
+    <>
+      <style>{zoomSliderStyles}</style>
+      <div style={styles.container}>
+        <button style={styles.button} onClick={onBack} aria-label="Back">◀️</button>
       <div style={styles.titleSection}>
         <h2 style={styles.title}>{title}</h2>
         {showStats && (
@@ -43,7 +77,8 @@ export const TopBar: React.FC<TopBarProps> = ({ onBack, onSettings, title = 'Bea
       ) : (
         <div style={styles.buttonPlaceholder} />
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

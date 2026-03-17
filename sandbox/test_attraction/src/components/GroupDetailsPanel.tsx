@@ -26,6 +26,7 @@ export const GroupDetailsPanel: React.FC<GroupDetailsPanelProps> = ({ group, onC
       case 'queuing': return '⏳';
       case 'entering': return '🚪';
       case 'visiting': return '🏖️';
+      case 'settled': return '🏖️';
       case 'leaving': return '👋';
       case 'despawned': return '💨';
       default: return '❓';
@@ -41,6 +42,7 @@ export const GroupDetailsPanel: React.FC<GroupDetailsPanelProps> = ({ group, onC
       case 'queuing': return 'Queuing';
       case 'entering': return 'Entering';
       case 'visiting': return 'Visiting';
+      case 'settled': return 'Settled';
       case 'leaving': return 'Leaving';
       case 'despawned': return 'Despawned';
       default: return 'Unknown';

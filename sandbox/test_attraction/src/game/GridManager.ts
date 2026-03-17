@@ -55,6 +55,10 @@ export class GridManager {
     return this.grid[gridY][gridX];
   }
 
+  getGrid(): Tile[][] {
+    return this.grid;
+  }
+
   setTileType(x: number, y: number, type: TileType): void {
     const tile = this.getTile(x, y);
     if (tile) {

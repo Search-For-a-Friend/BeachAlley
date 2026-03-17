@@ -32,6 +32,7 @@ export function createPeopleGroup(spawnPosition: Vector2, config: GameConfig): P
     satisfaction: 100,
     money: (Math.random() * 100) + 50,
     spawnTime: 0,
+    settledAt: null,
     timeInEstablishment: 0,
     color: groupConfig.color,
   };
@@ -58,7 +59,12 @@ export function isOutOfBounds(
 export function updateGroupFacing(group: PeopleGroup): void {
   const dx = group.position.x - group.previousPosition.x;
   const dy = group.position.y - group.previousPosition.y;
-  if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+  
+  // Only update facing if there's significant movement (prevent shaky behavior)
+  const movementThreshold = 0.5;
+  if (Math.abs(dx) < movementThreshold && Math.abs(dy) < movementThreshold) return;
+  
+  // Update facing based on primary movement direction
   if (Math.abs(dx) > Math.abs(dy)) {
     group.facingDirection = dx > 0 ? 'right' : 'left';
   } else {

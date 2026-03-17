@@ -15,6 +15,7 @@ interface LayoutTabbedProps {
   gameState?: GameState | null;
   gridManager?: any;
   spawnTilePosition?: { x: number; y: number } | null;
+  onCameraSystemRef?: (cameraSystem: any) => void;
 }
 
 type Tab = 'game' | 'build' | 'manage';
@@ -30,7 +31,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   terrainMap,
   gameState,
   gridManager,
-  spawnTilePosition
+  spawnTilePosition,
+  onCameraSystemRef,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab | null>('game');
   const [openDrawer, setOpenDrawer] = useState<DrawerType>(null);
@@ -46,6 +48,9 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   // Group interaction state
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  
+  // Zoom state (0-100%, current 100% default)
+  const [zoomLevel, setZoomLevel] = useState(100);
 
   const tabOrder: Tab[] = ['game', 'build', 'manage'];
   const drawerOrder: DrawerType[] = ['statistics', 'groups', 'settings', 'credits'];
@@ -241,6 +246,9 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           onGroupHover={handleGroupHover}
           gridManager={gridManager}
           spawnTilePosition={spawnTilePosition}
+          zoomLevel={zoomLevel}
+          onZoomChange={setZoomLevel}
+          onCameraSystemRef={onCameraSystemRef}
         />
         
                 

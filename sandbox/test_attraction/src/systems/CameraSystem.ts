@@ -33,6 +33,8 @@ export class CameraSystem {
   updateCanvasSize(width: number, height: number): void {
     this.canvasWidth = width;
     this.canvasHeight = height;
+    // Recalculate bounds after canvas size change
+    this.clampToMapBounds();
   }
 
   move(deltaX: number, deltaY: number): void {
@@ -47,6 +49,32 @@ export class CameraSystem {
     this.clampToMapBounds();
   }
 
+  setZoom(zoom: number): void {
+    this.camera.zoom = zoom;
+    this.clampToMapBounds();
+  }
+
+  centerOnTile(tileX: number, tileY: number): void {
+    console.log("CENTER on tile:", tileX, tileY);
+    // Convert tile coordinates to world coordinates
+    const worldX = (tileX - tileY) * (CANVAS_CONFIG.TILE_WIDTH / 2);
+    const worldY = (tileX + tileY) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
+    
+    console.log("World coords:", worldX, worldY);
+    console.log("Canvas dimensions:", this.canvasWidth, this.canvasHeight);
+    console.log("Current zoom:", this.camera.zoom);
+    
+    // Center the viewport on the tile
+    const centerX = worldX - this.canvasWidth / (2 * this.camera.zoom);
+    const centerY = worldY - this.canvasHeight / (2 * this.camera.zoom);
+    
+    console.log("Camera center coords:", centerX, centerY);
+    
+    this.setPosition(centerX, centerY);
+    
+    console.log("After setPosition:", this.camera.worldX, this.camera.worldY);
+  }
+
   private clampToMapBounds(): void {
     const bounds = this.getMapBounds();
     const halfViewportWidth = (this.canvasWidth / this.camera.zoom) / 2;
@@ -55,8 +83,16 @@ export class CameraSystem {
     const maxCameraX = bounds.maxWorldX - halfViewportWidth;
     const minCameraY = bounds.minWorldY - halfViewportHeight;
     const maxCameraY = bounds.maxWorldY - halfViewportHeight;
+    
+    console.log("Bounds:", bounds);
+    console.log("Half viewport:", halfViewportWidth, halfViewportHeight);
+    console.log("Camera limits:", minCameraX, maxCameraX, minCameraY, maxCameraY);
+    console.log("Camera before clamp:", this.camera.worldX, this.camera.worldY);
+    
     this.camera.worldX = Math.max(minCameraX, Math.min(maxCameraX, this.camera.worldX));
     this.camera.worldY = Math.max(minCameraY, Math.min(maxCameraY, this.camera.worldY));
+    
+    console.log("Camera after clamp:", this.camera.worldX, this.camera.worldY);
   }
 
   private getMapBounds(): ViewportBounds {
