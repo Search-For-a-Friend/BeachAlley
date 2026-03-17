@@ -304,17 +304,21 @@ export class EnvironmentGenerator {
       tiles.set(tileKey(row, col), 'sand');
     });
     
-    // Expand sand to create wider beaches (10-30 tiles wide)
-    const minSandWidth = 5;
-    const maxSandWidth = 23;
-    const targetSandWidth = minSandWidth + Math.floor(this.random.next() * (maxSandWidth - minSandWidth));
+    // Expand sand to create wider beaches with varying width
+    const minSandWidth = 1;
+    const maxSandWidth = 15;
     
-    // BFS expansion from initial sand tiles
+    // BFS expansion from initial sand tiles with varying width per expansion direction
     let queueIndex = 0;
     while (queueIndex < sandExpansionQueue.length) {
       const current = sandExpansionQueue[queueIndex++];
       
-      if (current.distance >= targetSandWidth) continue;
+      // Calculate varying sand width based on position and random factor
+      const widthVariation = Math.sin(current.col * 0.3) * 0.5 + Math.cos(current.row * 0.2) * 0.5;
+      const randomFactor = this.random.next();
+      const localTargetWidth = minSandWidth + Math.floor((maxSandWidth - minSandWidth) * (0.5 + widthVariation * 0.3 + randomFactor * 0.2));
+      
+      if (current.distance >= localTargetWidth) continue;
       
       // Check all neighbors for expansion
       for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
@@ -328,7 +332,7 @@ export class EnvironmentGenerator {
         // Only expand into water tiles
         if (tiles.get(nKey) === 'water') {
           // Add some randomness to create more natural beach shapes
-          const expansionChance = 0.7 + (current.distance / targetSandWidth) * 0.3; // Higher chance near grass
+          const expansionChance = 0.7 + (current.distance / localTargetWidth) * 0.3; // Higher chance near grass
           if (this.random.next() < expansionChance) {
             tiles.set(nKey, 'sand');
             sandDistances.set(nKey, current.distance + 1);
@@ -357,6 +361,29 @@ export class EnvironmentGenerator {
         // Convert isolated water pockets to sand if surrounded by sand
         if (sandNeighborCount >= 6) {
           tiles.set(key, 'sand');
+        }
+      }
+    }
+    
+    // Fill sand pockets within grass areas (similar to water pockets)
+    for (let row = 0; row < this.mapRows; row++) {
+      for (let col = 0; col < this.mapCols; col++) {
+        const key = tileKey(row, col);
+        if (tiles.get(key) !== 'sand') continue;
+        
+        // Count grass neighbors
+        let grassNeighborCount = 0;
+        for (const [dr, dc] of [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]) {
+          const nRow = row + dr;
+          const nCol = col + dc;
+          if (nRow >= 0 && nRow < this.mapRows && nCol >= 0 && nCol < this.mapCols && tiles.get(tileKey(nRow, nCol)) === 'grass') {
+            grassNeighborCount++;
+          }
+        }
+        
+        // Convert isolated sand pockets to grass if surrounded by grass
+        if (grassNeighborCount >= 7) {
+          tiles.set(key, 'grass');
         }
       }
     }

@@ -14,7 +14,6 @@ import {
 import {
   createPeopleGroup,
   setGroupState,
-  isOutOfBounds,
   updateGroupFacing,
 } from './peopleGroup';
 import { distance, moveTowards } from './utils';
@@ -64,7 +63,11 @@ export class GameEngine {
     this.terrainMap = terrainMap;
     this.gridManager = new GridManager(this.terrainMap.width, this.terrainMap.height);
     this.groupBehavior = new GroupBehavior({
-      settlementDuration: 10000, // 10 seconds
+      settlementDurations: {
+        individual: { min: 50000, max: 200000 },  // 50-200 seconds (short to long range)
+        smallGroup: { min: 80000, max: 150000 }, // 80-150 seconds (shorter range)
+        bigGroup: { min: 150000, max: 300000 }   // 150-300 seconds (long range)
+      },
       settlementRequirements: {} // No requirements for now
     });
     this.state = this.createInitialState();
@@ -240,7 +243,6 @@ export class GameEngine {
   private updateSpawning(): void {
     const now = this.state.time;
     if (now - this.lastSpawnTime < this.config.spawnInterval) return;
-    if (this.state.groups.length >= this.config.maxGroups) return;
     if (Math.random() > this.config.spawnProbability) return;
 
     this.lastSpawnTime = now;
@@ -311,7 +313,7 @@ export class GameEngine {
             const tileX = Math.floor(group.position.x);
             const tileY = Math.floor(group.position.y);
             
-            if (this.groupBehavior.canSettle(tileX, tileY)) {
+            if (this.groupBehavior.canSettle(tileX, tileY, group.size, group.id)) {
               // Settle the group
               this.groupBehavior.settleGroup(group, tileX, tileY);
               group.settledAt = this.state.time;
@@ -350,10 +352,8 @@ export class GameEngine {
     // Update patience
     group.patience = Math.max(0, group.patience - deltaTime / 1000);
 
-    // Check if group should despawn immediately
-    if (group.patience <= 0 || group.satisfaction <= 0 || isOutOfBounds(group, this.terrainMap.width, this.terrainMap.height)) {
-      setGroupState(group, 'despawned');
-    }
+    // Groups only despawn when reaching spawn tile after leaving
+    // No other despawn conditions allowed
   }
 
   

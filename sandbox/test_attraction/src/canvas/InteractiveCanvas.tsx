@@ -494,9 +494,9 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
           // People sprite (fallback to circle)
           const peopleSprite = (() => {
-            if (g.size <= 1) return peopleSpriteRef.current;
-            if (g.size <= 5) return smallGroupSpriteRef.current;
-            return bigGroupSpriteRef.current;
+            if (g.size === 1) return peopleSpriteRef.current; // 1 person = individual sprite
+            if (g.size <= 3) return smallGroupSpriteRef.current; // 2-3 people = small group sprite
+            return bigGroupSpriteRef.current; // 4+ people = big group sprite
           })();
 
           if (spritesReady && peopleSprite) {
