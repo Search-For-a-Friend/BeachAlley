@@ -407,8 +407,18 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         const { worldX, worldY } = cameraSystem.tileToWorld(tile.row, tile.col);
         const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
         let color: string;
+        
+        // Check if there's a settled group on this tile
+        const settledGroup = gameState?.groups?.find(g => 
+          g.state === 'settled' && 
+          Math.floor(g.position.x) === tile.col && 
+          Math.floor(g.position.y) === tile.row
+        );
+        
         switch (tile.terrainType) {
-          case 'sand': color = '#F4E4C1'; break;
+          case 'sand': 
+            color = settledGroup ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
+            break;
           case 'water': color = '#4A90E2'; break;
           case 'grass': color = '#7EC850'; break;
           case 'spawn': color = '#FFD700'; break; // Gold color for spawn tiles
@@ -466,13 +476,20 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }
         }
         
-        // Draw people groups
+        // Draw people groups with viewport culling
         gameState.groups.forEach(g => {
           const col = g.position.x;
           const row = g.position.y;
           const worldX = (col - row) * (CANVAS_CONFIG.TILE_WIDTH / 2);
           const worldY = (col + row) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
           const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+          
+          // Viewport culling - don't render off-screen groups
+          const cullMargin = 50; // Extra margin for smooth appearance
+          if (screenX < -cullMargin || screenX > canvasSize.width + cullMargin ||
+              screenY < -cullMargin || screenY > canvasSize.height + cullMargin) {
+            return; // Skip rendering this group
+          }
           
           const isHovered = hoveredGroupId === g.id;
           const isSelected = selectedGroupId === g.id;

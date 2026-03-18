@@ -14,11 +14,74 @@ export interface GroupBehaviorConfig {
   settlementRequirements: SettlementRequirements;
 }
 
+// Simple spatial grid for performance optimization
+class SpatialGrid {
+  private cellSize: number = 10; // 10 tiles per cell
+  private grid: Map<string, Vector2[]> = new Map();
+  
+  private getCellKey(x: number, y: number): string {
+    const cellX = Math.floor(x / this.cellSize);
+    const cellY = Math.floor(y / this.cellSize);
+    return `${cellX},${cellY}`;
+  }
+  
+  addGroup(groupId: string, position: Vector2): void {
+    const key = this.getCellKey(position.x, position.y);
+    if (!this.grid.has(key)) {
+      this.grid.set(key, []);
+    }
+    this.grid.get(key)!.push({ x: position.x, y: position.y, id: groupId } as any);
+  }
+  
+  removeGroup(groupId: string, position: Vector2): void {
+    const key = this.getCellKey(position.x, position.y);
+    const cell = this.grid.get(key);
+    if (cell) {
+      const index = cell.findIndex(pos => (pos as any).id === groupId);
+      if (index !== -1) {
+        cell.splice(index, 1);
+        if (cell.length === 0) {
+          this.grid.delete(key);
+        }
+      }
+    }
+  }
+  
+  getNearbyGroups(position: Vector2, radius: number): Vector2[] {
+    const nearby: Vector2[] = [];
+    const minCellX = Math.floor((position.x - radius) / this.cellSize);
+    const maxCellX = Math.floor((position.x + radius) / this.cellSize);
+    const minCellY = Math.floor((position.y - radius) / this.cellSize);
+    const maxCellY = Math.floor((position.y + radius) / this.cellSize);
+    
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+      for (let cellY = minCellY; cellY <= maxCellY; cellY++) {
+        const key = `${cellX},${cellY}`;
+        const cell = this.grid.get(key);
+        if (cell) {
+          nearby.push(...cell);
+        }
+      }
+    }
+    
+    return nearby.filter(pos => {
+      const dx = pos.x - position.x;
+      const dy = pos.y - position.y;
+      return Math.sqrt(dx * dx + dy * dy) <= radius;
+    });
+  }
+  
+  clear(): void {
+    this.grid.clear();
+  }
+}
+
 export class GroupBehavior {
   private settlementDurations: GroupBehaviorConfig['settlementDurations'];
   private settledGroups: Map<string, Vector2> = new Map(); // groupId -> tile position
   private occupiedTiles: Set<string> = new Set(); // Set of occupied tile coordinates
   private failedSettlementAttempts: Map<string, number> = new Map(); // groupId -> failed attempts
+  private spatialGrid: SpatialGrid = new SpatialGrid();
 
   constructor(config: GroupBehaviorConfig) {
     this.settlementDurations = config.settlementDurations;
@@ -86,29 +149,26 @@ export class GroupBehavior {
   }
 
   /**
-   * Check if there are nearby groups within the specified distance range
+   * Check if there are nearby SETTLED groups within specified distance range (optimized)
    */
   private hasNearbyGroups(tileX: number, tileY: number, minDistance: number, maxDistance: number): boolean {
-    for (const [, position] of this.settledGroups) {
-      const distance = Math.sqrt(Math.pow(position.x - tileX, 2) + Math.pow(position.y - tileY, 2));
-      if (distance >= minDistance && distance <= maxDistance) {
-        return true;
-      }
-    }
-    return false;
+    const position = { x: tileX, y: tileY };
+    const nearbyGroups = this.spatialGrid.getNearbyGroups(position, maxDistance);
+    
+    return nearbyGroups.some(nearbyPos => {
+      const distance = Math.sqrt(Math.pow(nearbyPos.x - tileX, 2) + Math.pow(nearbyPos.y - tileY, 2));
+      return distance >= minDistance && distance <= maxDistance;
+    });
   }
 
   /**
-   * Check if there are no nearby groups within the specified distance
+   * Check if there are no nearby groups within the specified distance (optimized)
    */
   private hasNoNearbyGroups(tileX: number, tileY: number, minDistance: number): boolean {
-    for (const [, position] of this.settledGroups) {
-      const distance = Math.sqrt(Math.pow(position.x - tileX, 2) + Math.pow(position.y - tileY, 2));
-      if (distance < minDistance) {
-        return false;
-      }
-    }
-    return true;
+    const position = { x: tileX, y: tileY };
+    const nearbyGroups = this.spatialGrid.getNearbyGroups(position, minDistance);
+    
+    return nearbyGroups.length === 0;
   }
 
   /**
@@ -122,8 +182,10 @@ export class GroupBehavior {
     }
 
     // Mark group as settled
-    this.settledGroups.set(group.id, { x: tileX, y: tileY });
+    const position = { x: tileX, y: tileY };
+    this.settledGroups.set(group.id, position);
     this.occupiedTiles.add(tileKey);
+    this.spatialGrid.addGroup(group.id, position); // Add to spatial grid
     
     // Set group state to settled with random duration
     group.state = 'settled';
@@ -138,9 +200,31 @@ export class GroupBehavior {
   }
 
   /**
+   * Update all groups in spatial grid (settled groups only for proximity checks)
+   */
+  public updateAllGroups(groups: PeopleGroup[]): void {
+    // Clear and rebuild spatial grid with SETTLED groups only
+    this.spatialGrid.clear();
+    
+    for (const group of groups) {
+      if (group.state === 'settled') {
+        // Add settled groups to spatial grid
+        const settledPosition = this.settledGroups.get(group.id);
+        if (settledPosition) {
+          this.spatialGrid.addGroup(group.id, settledPosition);
+        }
+      }
+      // Note: Wandering/idle groups are NOT added to spatial grid
+      // Only settled groups matter for proximity-based settlement decisions
+    }
+  }
+
+  /**
    * Update settled groups and check if any should leave settlement
    */
   public updateSettledGroups(groups: PeopleGroup[], currentTime: number): void {
+    this.updateAllGroups(groups); // Update spatial grid first
+    
     for (const group of groups) {
       if (group.state !== 'settled') continue;
       
@@ -169,6 +253,7 @@ export class GroupBehavior {
     // Remove from tracking
     this.settledGroups.delete(group.id);
     this.occupiedTiles.delete(tileKey);
+    this.spatialGrid.removeGroup(group.id, settledPosition); // Remove from spatial grid
     
     // Random behavior for small groups and individuals
     if (group.size <= 3) {

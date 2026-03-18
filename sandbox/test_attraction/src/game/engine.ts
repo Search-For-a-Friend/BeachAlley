@@ -57,6 +57,10 @@ export class GameEngine {
   private spawnTiles: Vector2[] = [];
   /** Event queue for buffering events */
   private eventQueue: GameEvent[] = [];
+  /** Performance optimization settings */
+  private maxActiveGroups: number = 100;
+  private lastGroupUpdate: Map<string, number> = new Map();
+  private updateFrequency: number = 100; // ms between updates for distant groups
 
   constructor(config: Partial<GameConfig>, terrainMap: TerrainMap) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -233,7 +237,7 @@ export class GameEngine {
     // Update existing groups
     this.updateGroups(deltaTime);
 
-    // Update settled groups
+    // Update spatial grid and settled groups
     this.groupBehavior.updateSettledGroups(this.state.groups, this.state.time);
 
     // Clean up despawned groups
@@ -242,6 +246,12 @@ export class GameEngine {
 
   private updateSpawning(): void {
     const now = this.state.time;
+    
+    // Enforce maximum group limit for performance
+    if (this.state.groups.length >= this.maxActiveGroups) {
+      return;
+    }
+    
     if (now - this.lastSpawnTime < this.config.spawnInterval) return;
     if (Math.random() > this.config.spawnProbability) return;
 
@@ -267,8 +277,23 @@ export class GameEngine {
   
   private updateGroups(deltaTime: number): void {
     this.state.groups.forEach(group => {
-      this.updateGroup(group, deltaTime);
+      if (this.shouldUpdateGroup(group, this.state.time)) {
+        this.updateGroup(group, deltaTime);
+        this.lastGroupUpdate.set(group.id, this.state.time);
+      }
     });
+  }
+
+  private shouldUpdateGroup(group: PeopleGroup, currentTime: number): boolean {
+    const lastUpdate = this.lastGroupUpdate.get(group.id) || 0;
+    
+    // Always update groups that are moving or in critical states
+    if (group.state === 'spawning' || group.state === 'seeking' || group.state === 'wandering' || group.state === 'leaving') {
+      return true;
+    }
+    
+    // Throttle updates for settled and idle groups
+    return currentTime - lastUpdate >= this.updateFrequency;
   }
 
   private updateGroup(group: PeopleGroup, deltaTime: number): void {
@@ -286,10 +311,17 @@ export class GameEngine {
             setGroupState(group, 'seeking');
           }
         } else {
-          // Once on sand, wander freely
-          const targetPos = this.findRandomWalkablePosition(group.position);
-          group.targetPosition = targetPos;
-          setGroupState(group, 'wandering');
+          // Once on sand, find best settlement position
+          const targetPos = this.findBestSettlementPosition(group);
+          if (targetPos) {
+            group.targetPosition = targetPos;
+            setGroupState(group, 'wandering');
+          } else {
+            // Fallback to random walk
+            const randomPos = this.findRandomWalkablePosition(group.position);
+            group.targetPosition = randomPos;
+            setGroupState(group, 'wandering');
+          }
         }
         break;
 
@@ -372,25 +404,99 @@ export class GameEngine {
   }
 
   
-  private findRandomWalkablePosition(from: Vector2): Vector2 {
-    const radius = 20;
-    let attempts = 0;
-    
-    while (attempts < 20) {
+  private findRandomWalkablePosition(startPos: Vector2): Vector2 {
+    const attempts = 10;
+    for (let i = 0; i < attempts; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = Math.random() * radius;
-      const x = Math.round(from.x + Math.cos(angle) * dist);
-      const y = Math.round(from.y + Math.sin(angle) * dist);
+      const distance = 2 + Math.random() * 8; // Random walk distance
+      const targetX = startPos.x + Math.cos(angle) * distance;
+      const targetY = startPos.y + Math.sin(angle) * distance;
       
-      const tile = this.gridManager.getTile(x, y);
-      if (tile && tile.type === 'path') { // Only wander on sand (path tiles)
-        return { x, y };
+      // Check if position is on sand and within bounds
+      const testPos = { x: targetX, y: targetY };
+      if (this.isPositionOnSand(testPos) && 
+          targetX >= 0 && targetX < this.terrainMap.width &&
+          targetY >= 0 && targetY < this.terrainMap.height) {
+        return testPos;
       }
-      
-      attempts++;
     }
     
-    return from;
+    // Fallback to current position
+    return startPos;
+  }
+
+  private findBestSettlementPosition(group: PeopleGroup): Vector2 | null {
+    const searchRadius = 15; // Search within 15 tiles
+    const currentPos = group.position;
+    let bestPosition: Vector2 | null = null;
+    let bestScore = -Infinity;
+
+    // Search in a spiral pattern from current position
+    for (let radius = 1; radius <= searchRadius; radius++) {
+      for (let angle = 0; angle < Math.PI * 2; angle += 0.5) {
+        const testX = Math.round(currentPos.x + Math.cos(angle) * radius);
+        const testY = Math.round(currentPos.y + Math.sin(angle) * radius);
+        
+        // Check bounds and sand tile
+        const testPos = { x: testX, y: testY };
+        if (testX < 0 || testX >= this.terrainMap.width || 
+            testY < 0 || testY >= this.terrainMap.height ||
+            !this.isPositionOnSand(testPos)) {
+          continue;
+        }
+
+        // Calculate settlement score
+        let score = 0;
+        
+        // Base score for being a sand tile
+        score += 10;
+        
+        // Distance penalty (prefer closer tiles)
+        const distance = Math.sqrt(Math.pow(testX - currentPos.x, 2) + Math.pow(testY - currentPos.y, 2));
+        score -= distance * 2;
+        
+        // Settlement requirements bonus
+        if (this.groupBehavior.canSettle(testX, testY, group.size, group.id)) {
+          score += 100; // Huge bonus for tiles that meet requirements
+        }
+        
+        // For small groups, bonus for being near other groups
+        if (group.size <= 3) {
+          const nearbyCount = this.countNearbyGroups(testX, testY, 3);
+          if (nearbyCount > 0 && nearbyCount <= 3) {
+            score += nearbyCount * 20; // Bonus for having 1-3 nearby groups
+          }
+        }
+        
+        // For big groups, bonus for being away from others
+        if (group.size > 3) {
+          const nearbyCount = this.countNearbyGroups(testX, testY, 5);
+          if (nearbyCount === 0) {
+            score += 50; // Bonus for isolation
+          }
+        }
+        
+        if (score > bestScore) {
+          bestScore = score;
+          bestPosition = { x: testX, y: testY };
+        }
+      }
+    }
+    
+    return bestPosition;
+  }
+
+  private countNearbyGroups(tileX: number, tileY: number, radius: number): number {
+    let count = 0;
+    for (const group of this.state.groups) {
+      if (group.state === 'settled') { // Only count settled groups
+        const distance = Math.sqrt(Math.pow(group.position.x - tileX, 2) + Math.pow(group.position.y - tileY, 2));
+        if (distance <= radius) {
+          count++;
+        }
+      }
+    }
+    return count;
   }
 
   private findClosestSandTile(from: Vector2): Vector2 | null {
@@ -416,6 +522,11 @@ export class GameEngine {
 
   private isOnSand(group: PeopleGroup): boolean {
     const tile = this.gridManager.getTile(Math.floor(group.position.x), Math.floor(group.position.y));
+    return tile?.type === 'path'; // Sand tiles are mapped to 'path' in grid
+  }
+
+  private isPositionOnSand(position: Vector2): boolean {
+    const tile = this.gridManager.getTile(Math.floor(position.x), Math.floor(position.y));
     return tile?.type === 'path'; // Sand tiles are mapped to 'path' in grid
   }
 
