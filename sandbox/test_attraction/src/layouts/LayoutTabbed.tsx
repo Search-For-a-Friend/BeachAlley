@@ -4,6 +4,7 @@ import { TerrainMap } from '../types/environment';
 import { GameState } from '../types';
 import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
 import { GroupDetailsPanel } from '../components/GroupDetailsPanel';
+import { GroupBehavior } from '../game/GroupBehavior';
 import Logger from '../utils/Logger';
 
 interface LayoutTabbedProps {
@@ -16,6 +17,7 @@ interface LayoutTabbedProps {
   gridManager?: any;
   spawnTilePosition?: { x: number; y: number } | null;
   onCameraSystemRef?: (cameraSystem: any) => void;
+  groupBehavior?: GroupBehavior;
 }
 
 type Tab = 'game' | 'build' | 'manage';
@@ -33,6 +35,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   gridManager,
   spawnTilePosition,
   onCameraSystemRef,
+  groupBehavior,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab | null>('game');
   const [openDrawer, setOpenDrawer] = useState<DrawerType>(null);
@@ -249,6 +252,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           zoomLevel={zoomLevel}
           onZoomChange={setZoomLevel}
           onCameraSystemRef={onCameraSystemRef}
+          groupBehavior={groupBehavior}
         />
         
                 

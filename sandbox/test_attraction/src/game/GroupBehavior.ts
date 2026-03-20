@@ -78,13 +78,46 @@ class SpatialGrid {
 
 export class GroupBehavior {
   private settlementDurations: GroupBehaviorConfig['settlementDurations'];
-  private settledGroups: Map<string, Vector2> = new Map(); // groupId -> tile position
-  private occupiedTiles: Set<string> = new Set(); // Set of occupied tile coordinates
+  private settledGroups: Map<string, Vector2> = new Map(); // groupId -> center tile position
+  private occupiedTiles: Set<string> = new Set(); // Set of all occupied tile coordinates
+  private settlementAreas: Map<string, Vector2[]> = new Map(); // groupId -> all tiles in settlement area
   private failedSettlementAttempts: Map<string, number> = new Map(); // groupId -> failed attempts
   private spatialGrid: SpatialGrid = new SpatialGrid();
 
   constructor(config: GroupBehaviorConfig) {
     this.settlementDurations = config.settlementDurations;
+  }
+
+  /**
+   * Get settlement area size based on group size
+   */
+  private getSettlementAreaSize(groupSize: number): { width: number; height: number } {
+    if (groupSize === 1) {
+      return { width: 2, height: 1 }; // Individual: 2x1 tiles
+    } else if (groupSize <= 3) {
+      return { width: 2, height: 2 }; // Small group: 2x2 tiles
+    } else {
+      return { width: 3, height: 3 }; // Large group: 3x3 tiles
+    }
+  }
+
+  /**
+   * Get all tiles in a settlement area
+   */
+  private getSettlementAreaTiles(centerX: number, centerY: number, width: number, height: number): Vector2[] {
+    const tiles: Vector2[] = [];
+    
+    // Calculate starting position to center the area
+    const startX = centerX - Math.floor(width / 2);
+    const startY = centerY - Math.floor(height / 2);
+    
+    for (let dx = 0; dx < width; dx++) {
+      for (let dy = 0; dy < height; dy++) {
+        tiles.push({ x: startX + dx, y: startY + dy });
+      }
+    }
+    
+    return tiles;
   }
 
   /**
@@ -107,19 +140,23 @@ export class GroupBehavior {
   }
 
   /**
-   * Check if settlement is possible at the given tile position
+   * Check if settlement is possible at the given tile position (multi-tile aware)
    */
   public canSettle(tileX: number, tileY: number, groupSize: number, groupId: string): boolean {
-    const tileKey = `${tileX},${tileY}`;
+    const areaSize = this.getSettlementAreaSize(groupSize);
+    const areaTiles = this.getSettlementAreaTiles(tileX, tileY, areaSize.width, areaSize.height);
     
-    // Check if tile is already occupied
-    if (this.occupiedTiles.has(tileKey)) {
-      return false;
+    // Check if any tile in the area is already occupied
+    for (const tile of areaTiles) {
+      const tileKey = `${tile.x},${tile.y}`;
+      if (this.occupiedTiles.has(tileKey)) {
+        return false;
+      }
     }
     
     // Apply group size settlement rules
     if (groupSize === 1) {
-      // Individuals can settle anywhere (as long as tile is free)
+      // Individuals can settle anywhere (as long as area is free)
       return true;
     } else if (groupSize <= 3) {
       // Small groups (2-3) settle near other groups (1-3 tiles away)
@@ -172,20 +209,28 @@ export class GroupBehavior {
   }
 
   /**
-   * Settle a group at the given tile position
+   * Settle a group at the given tile position (multi-tile aware)
    */
   public settleGroup(group: PeopleGroup, tileX: number, tileY: number): void {
-    const tileKey = `${tileX},${tileY}`;
-    
     if (!this.canSettle(tileX, tileY, group.size, group.id)) {
       return; // Cannot settle here
     }
 
+    const areaSize = this.getSettlementAreaSize(group.size);
+    const areaTiles = this.getSettlementAreaTiles(tileX, tileY, areaSize.width, areaSize.height);
+
     // Mark group as settled
     const position = { x: tileX, y: tileY };
     this.settledGroups.set(group.id, position);
-    this.occupiedTiles.add(tileKey);
-    this.spatialGrid.addGroup(group.id, position); // Add to spatial grid
+    this.settlementAreas.set(group.id, areaTiles); // Store settlement area
+    
+    // Occupy all tiles in the settlement area
+    for (const tile of areaTiles) {
+      const tileKey = `${tile.x},${tile.y}`;
+      this.occupiedTiles.add(tileKey);
+    }
+    
+    this.spatialGrid.addGroup(group.id, position); // Add center to spatial grid
     
     // Set group state to settled with random duration
     group.state = 'settled';
@@ -196,7 +241,7 @@ export class GroupBehavior {
     const settlementDuration = this.generateSettlementDuration(group.size);
     (group as any).settlementDuration = settlementDuration; // Store for this specific group
     
-    console.log(`Group ${group.id} (${group.size} people) settled at tile (${tileX}, ${tileY}) for ${Math.round(settlementDuration / 1000)}s`);
+    console.log(`Group ${group.id} (${group.size} people) settled at tile (${tileX}, ${tileY}) occupying ${areaTiles.length} tiles for ${Math.round(settlementDuration / 1000)}s`);
   }
 
   /**
@@ -242,18 +287,23 @@ export class GroupBehavior {
   }
 
   /**
-   * Remove a group from settlement
+   * Unsettle a group and make them leave (multi-tile aware)
    */
   public unsettleGroup(group: PeopleGroup): void {
     const settledPosition = this.settledGroups.get(group.id);
-    if (!settledPosition) return;
+    const settlementArea = this.settlementAreas.get(group.id);
+    if (!settledPosition || !settlementArea) return;
 
-    const tileKey = `${settledPosition.x},${settledPosition.y}`;
-    
     // Remove from tracking
     this.settledGroups.delete(group.id);
-    this.occupiedTiles.delete(tileKey);
+    this.settlementAreas.delete(group.id);
     this.spatialGrid.removeGroup(group.id, settledPosition); // Remove from spatial grid
+    
+    // Free all tiles in the settlement area
+    for (const tile of settlementArea) {
+      const tileKey = `${tile.x},${tile.y}`;
+      this.occupiedTiles.delete(tileKey);
+    }
     
     // Random behavior for small groups and individuals
     if (group.size <= 3) {
@@ -264,12 +314,12 @@ export class GroupBehavior {
         console.log(`Group ${group.id} (${group.size} people) left settlement and will wander`);
       } else {
         group.state = 'leaving'; // Head back to spawn
-        console.log(`Group ${group.id} (${group.size} people) left settlement and will leave`);
+        console.log(`Group ${group.id} (${group.size} people) left settlement and is leaving`);
       }
     } else {
-      // Big groups: always leave
+      // Big groups always leave
       group.state = 'leaving';
-      console.log(`Group ${group.id} (${group.size} people) left settlement and will leave`);
+      console.log(`Group ${group.id} (${group.size} people) left settlement and is leaving`);
     }
   }
 
@@ -280,7 +330,24 @@ export class GroupBehavior {
     // Use the individual group's settlement duration
     const settledAt = group.settledAt || currentTime;
     const settlementDuration = (group as any).settlementDuration || 10000; // Fallback to 10s
-    return currentTime - settledAt > settlementDuration;
+    
+    return currentTime - settledAt >= settlementDuration;
+  }
+
+  /**
+   * Get all tiles occupied by settled groups (for visual feedback)
+   */
+  public getAllSettledTiles(): Set<string> {
+    const settledTiles = new Set<string>();
+    
+    for (const [, areaTiles] of this.settlementAreas) {
+      for (const tile of areaTiles) {
+        const tileKey = `${tile.x},${tile.y}`;
+        settledTiles.add(tileKey);
+      }
+    }
+    
+    return settledTiles;
   }
 
   /**

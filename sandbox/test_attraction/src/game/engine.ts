@@ -24,25 +24,6 @@ import Logger from '../utils/Logger';
 
 export type EventCallback = GameEventCallback;
 
-/** Find grass tiles approximately targetDist tiles away from (centerRow, centerCol). */
-function findGrassTilesAboutDistanceAway(
-  terrainMap: TerrainMap,
-  centerRow: number,
-  centerCol: number,
-  targetDist: number,
-  tolerance: number
-): Array<{ row: number; col: number }> {
-  const out: Array<{ row: number; col: number }> = [];
-  const minD = targetDist - tolerance;
-  const maxD = targetDist + tolerance;
-  terrainMap.tiles.forEach((type, key) => {
-    if (type !== 'grass') return;
-    const [row, col] = key.split(',').map(Number);
-    const d = Math.sqrt((row - centerRow) ** 2 + (col - centerCol) ** 2);
-    if (d >= minD && d <= maxD) out.push({ row, col });
-  });
-  return out;
-}
 
 export class GameEngine {
   private state: GameState;
@@ -80,12 +61,36 @@ export class GameEngine {
   }
 
   private generateSpawnTile(): void {
-    // Find all grass tiles
-    const grassTiles: Array<{ row: number; col: number }> = [];
+    // Step 1: Select a sand tile randomly in the whole map (sand tiles less than 10 tiles from border are forbidden)
+    const sandTiles: Array<{ row: number; col: number }> = [];
+    this.terrainMap.tiles.forEach((type, key) => {
+      if (type === 'sand') {
+        const [row, col] = key.split(',').map(Number);
+        
+        // Check if sand tile is at least 10 tiles from border
+        const distanceFromBorder = Math.min(row, col, this.terrainMap.height - 1 - row, this.terrainMap.width - 1 - col);
+        if (distanceFromBorder >= 10) {
+          sandTiles.push({ row, col });
+        }
+      }
+    });
+
+    if (sandTiles.length === 0) {
+      Logger.warn('GAME', 'No eligible sand tiles found for spawn tile generation');
+      return;
+    }
+
+    // Randomly select one sand tile
+    const selectedSandTile = sandTiles[Math.floor(Math.random() * sandTiles.length)];
+    Logger.info('GAME', 'Step 1: Selected sand tile', { position: selectedSandTile });
+
+    // Step 2: Choose the closest grass tile to this sand tile
+    const grassTiles: Array<{ row: number; col: number; distance: number }> = [];
     this.terrainMap.tiles.forEach((type, key) => {
       if (type === 'grass') {
         const [row, col] = key.split(',').map(Number);
-        grassTiles.push({ row, col });
+        const distance = Math.sqrt(Math.pow(row - selectedSandTile.row, 2) + Math.pow(col - selectedSandTile.col, 2));
+        grassTiles.push({ row, col, distance });
       }
     });
 
@@ -94,32 +99,43 @@ export class GameEngine {
       return;
     }
 
-    // Try to find a spawn tile at least 10 tiles away from sand
-    let spawnTile: { row: number; col: number } | null = null;
+    // Sort by distance and pick the closest
+    grassTiles.sort((a, b) => a.distance - b.distance);
+    const closestGrassTile = grassTiles[0];
+    Logger.info('GAME', 'Step 2: Closest grass tile', { position: closestGrassTile, distance: closestGrassTile.distance });
+
+    // Step 3: The spawn tile should be at a random distance, between 3 tiles and 10 tiles away, from this selected grass tile (grass tiles only)
+    const minDistance = 3;
+    const maxDistance = 10;
+    const spawnCandidates: Array<{ row: number; col: number; distance: number }> = [];
     
-    // First try: Find grass tiles 10 tiles away from sand
-    for (const grassTile of grassTiles) {
-      const spawnCandidates = findGrassTilesAboutDistanceAway(this.terrainMap, grassTile.row, grassTile.col, 10, 3);
-      if (spawnCandidates.length > 0) {
-        spawnTile = spawnCandidates[Math.floor(Math.random() * spawnCandidates.length)];
-        break;
+    // Find all GRASS tiles between 3 and 10 tiles of the closest grass tile
+    this.terrainMap.tiles.forEach((type, key) => {
+      if (type === 'grass') { // Only grass tiles are eligible for spawn
+        const [row, col] = key.split(',').map(Number);
+        const distance = Math.sqrt(Math.pow(row - closestGrassTile.row, 2) + Math.pow(col - closestGrassTile.col, 2));
+        if (distance >= minDistance && distance <= maxDistance) {
+          spawnCandidates.push({ row, col, distance });
+        }
       }
+    });
+
+    if (spawnCandidates.length === 0) {
+      Logger.warn('GAME', 'No spawn candidates found between 3 and 10 tiles of closest grass tile');
+      return;
     }
 
-    // Fallback: Use any grass tile
-    if (!spawnTile) {
-      spawnTile = grassTiles[Math.floor(Math.random() * grassTiles.length)];
-    }
+    // Randomly select from candidates
+    const spawnTile = spawnCandidates[Math.floor(Math.random() * spawnCandidates.length)];
+    Logger.info('GAME', 'Step 3: Selected spawn tile', { position: spawnTile, distance: spawnTile.distance });
 
     // Set the spawn tile
-    if (spawnTile) {
-      this.gridManager.setTileType(spawnTile.col, spawnTile.row, 'spawn');
-      this.spawnTiles.push({ x: spawnTile.col + 0.5, y: spawnTile.row + 0.5 });
-      Logger.info('GAME', 'Spawn tile generated', { position: spawnTile });
-      
-      // Automatically center on spawn tile after generation
-      this.centerViewportOnSpawn();
-    }
+    this.gridManager.setTileType(spawnTile.col, spawnTile.row, 'spawn');
+    this.spawnTiles.push({ x: spawnTile.col + 0.5, y: spawnTile.row + 0.5 });
+    Logger.info('GAME', 'Spawn tile generated', { position: spawnTile });
+    
+    // Automatically center on spawn tile after generation
+    this.centerViewportOnSpawn();
   }
 
   centerViewportOnSpawn(): void {
@@ -186,8 +202,18 @@ export class GameEngine {
     return { ...this.state };
   }
 
+  /**
+   * Get the grid manager
+   */
   public getGridManager(): GridManager {
     return this.gridManager;
+  }
+
+  /**
+   * Get the group behavior manager
+   */
+  public getGroupBehavior(): GroupBehavior {
+    return this.groupBehavior;
   }
 
   

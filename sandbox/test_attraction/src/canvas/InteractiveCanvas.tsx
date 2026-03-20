@@ -5,9 +5,10 @@ import { CameraSystem } from '../systems/CameraSystem';
 import { TileLoader } from '../systems/TileLoader';
 import { InputHandler } from '../systems/InputHandler';
 import { CameraState } from '../types/canvas';
-import { TerrainMap } from '../types/environment';
-import { GameState } from '../types';
 import { CANVAS_CONFIG } from './config';
+import { GameState } from '../types';
+import { TerrainMap } from '../types/environment';
+import { GroupBehavior } from '../game/GroupBehavior';
 
 type SpriteManifest = {
   name: string;
@@ -266,6 +267,7 @@ export interface InteractiveCanvasProps {
   zoomLevel?: number;
   onZoomChange?: (level: number) => void;
   onCameraSystemRef?: (cameraSystem: any) => void;
+  groupBehavior?: GroupBehavior; // Add groupBehavior for settlement area access
 }
 
 export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
@@ -282,6 +284,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   zoomLevel = 100,
   onZoomChange,
   onCameraSystemRef,
+  groupBehavior,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -379,7 +382,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   useEffect(() => {
     if (!canvasRef.current) return;
     const inputHandler = new InputHandler(canvasRef.current);
-    inputHandler.setOnDrag((dx, dy) => cameraSystem.move(dx, dy));
+    inputHandler.setOnDrag((dx: number, dy: number) => cameraSystem.move(dx, dy));
     inputHandlerRef.current = inputHandler;
     return () => inputHandler.destroy();
   }, [cameraSystem]);
@@ -408,16 +411,13 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
         let color: string;
         
-        // Check if there's a settled group on this tile
-        const settledGroup = gameState?.groups?.find(g => 
-          g.state === 'settled' && 
-          Math.floor(g.position.x) === tile.col && 
-          Math.floor(g.position.y) === tile.row
-        );
+        // Check if this tile is part of any settlement area
+        const tileKey = `${tile.col},${tile.row}`;
+        const isSettledTile = groupBehavior?.getAllSettledTiles().has(tileKey) || false;
         
         switch (tile.terrainType) {
           case 'sand': 
-            color = settledGroup ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
+            color = isSettledTile ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
             break;
           case 'water': color = '#4A90E2'; break;
           case 'grass': color = '#7EC850'; break;
