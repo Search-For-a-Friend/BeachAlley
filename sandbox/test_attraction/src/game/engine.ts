@@ -19,6 +19,7 @@ import {
 import { distance, moveTowards } from './utils';
 import { GridManager } from './GridManager';
 import { GroupBehavior } from './GroupBehavior';
+import { IndividualManager } from './Individual';
 import { TerrainMap } from '../types/environment';
 import Logger from '../utils/Logger';
 
@@ -31,6 +32,7 @@ export class GameEngine {
   private eventCallbacks: EventCallback[] = [];
   private gridManager: GridManager;
   private groupBehavior: GroupBehavior;
+  private individualManager: IndividualManager;
   private terrainMap: TerrainMap;
   private lastSpawnTime: number = 0;
   private animationFrameId: number | null = null;
@@ -42,11 +44,15 @@ export class GameEngine {
   private maxActiveGroups: number = 100;
   private lastGroupUpdate: Map<string, number> = new Map();
   private updateFrequency: number = 100; // ms between updates for distant groups
+  /** Individual spawning settings */
+  private lastIndividualSpawnTime: Map<string, number> = new Map();
+  private individualSpawnInterval: number = 2000; // 2 seconds between spawns
 
   constructor(config: Partial<GameConfig>, terrainMap: TerrainMap) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.terrainMap = terrainMap;
     this.gridManager = new GridManager(this.terrainMap.width, this.terrainMap.height);
+    this.individualManager = new IndividualManager(terrainMap);
     this.groupBehavior = new GroupBehavior({
       settlementDurations: {
         individual: { min: 50000, max: 200000 },  // 50-200 seconds (short to long range)
@@ -216,6 +222,13 @@ export class GameEngine {
     return this.groupBehavior;
   }
 
+  /**
+   * Get the individual manager
+   */
+  public getIndividualManager(): IndividualManager {
+    return this.individualManager;
+  }
+
   
   public on(event: GameEvent): void {
     this.eventQueue.push(event);
@@ -262,6 +275,9 @@ export class GameEngine {
 
     // Update existing groups
     this.updateGroups(deltaTime);
+
+    // Update individuals
+    this.updateIndividuals(deltaTime);
 
     // Update spatial grid and settled groups
     this.groupBehavior.updateSettledGroups(this.state.groups, this.state.time);
@@ -371,15 +387,8 @@ export class GameEngine {
             const tileX = Math.floor(group.position.x);
             const tileY = Math.floor(group.position.y);
             
-            if (this.groupBehavior.canSettle(tileX, tileY, group.size, group.id)) {
-              // Settle the group
-              this.groupBehavior.settleGroup(group, tileX, tileY);
-              group.settledAt = this.state.time;
-            } else {
-              // Can't settle, find new target
-              group.targetPosition = null;
-              setGroupState(group, 'idle');
-            }
+            // Try to settle the group (manages failed attempts)
+            this.groupBehavior.trySettle(group, tileX, tileY, this.state.time);
           }
         }
         break;
@@ -400,6 +409,8 @@ export class GameEngine {
           const reached = this.moveGroupTowards(group, group.targetPosition, deltaTime);
           if (reached) {
             group.targetPosition = null;
+            // Remove all individuals for this group
+            this.individualManager.removeGroupIndividuals(group.id);
             setGroupState(group, 'despawned');
           }
         }
@@ -412,6 +423,68 @@ export class GameEngine {
 
     // Groups only despawn when reaching spawn tile after leaving
     // No other despawn conditions allowed
+  }
+
+  private updateIndividuals(deltaTime: number): void {
+    const now = this.state.time;
+
+    // Update all individuals
+    const allIndividuals = this.individualManager.getAllIndividuals();
+    for (const individual of allIndividuals) {
+      this.individualManager.updateIndividual(individual, deltaTime);
+    }
+
+    // Spawn individuals from settled groups
+    this.spawnIndividuals(now);
+
+    // Check group leaving conditions
+    this.checkGroupLeavingConditions();
+  }
+
+  private spawnIndividuals(now: number): void {
+    for (const group of this.state.groups) {
+      // Only spawn from settled groups (not leaving groups)
+      if (group.state !== 'settled') continue;
+
+      const groupIndividuals = this.individualManager.getGroupIndividuals(group.id);
+      if (!groupIndividuals) {
+        // Initialize group individuals tracking
+        this.individualManager.initializeGroupIndividuals(group.id, group.size);
+        continue;
+      }
+
+      const lastSpawnTime = this.lastIndividualSpawnTime.get(group.id) || 0;
+      
+      // Check if it's time to spawn a new individual (leave group)
+      if (now - lastSpawnTime >= this.individualSpawnInterval && 
+          groupIndividuals.leftGroupCount < groupIndividuals.maxIndividuals) {
+        
+        const individual = this.individualManager.createIndividual(
+          group.id, 
+          group.position, 
+          group.size
+        );
+        
+        if (individual) {
+          this.lastIndividualSpawnTime.set(group.id, now);
+          Logger.info('GAME', 'Individual left group', { 
+            groupId: group.id, 
+            individualId: individual.id 
+          });
+        }
+      }
+    }
+  }
+
+  private checkGroupLeavingConditions(): void {
+    for (const group of this.state.groups) {
+      if (group.state === 'settled' && this.shouldLeaveSettlement(group)) {
+        // Unsettle tiles immediately when leaving starts
+        this.groupBehavior.unsettleGroup(group);
+        setGroupState(group, 'leaving');
+        Logger.info('GAME', 'Group leaving - all individuals have left exactly once', { groupId: group.id });
+      }
+    }
   }
 
   
@@ -523,6 +596,11 @@ export class GameEngine {
       }
     }
     return count;
+  }
+
+  private shouldLeaveSettlement(group: PeopleGroup): boolean {
+    // Check if all individuals have returned
+    return this.individualManager.canGroupLeave(group.id);
   }
 
   private findClosestSandTile(from: Vector2): Vector2 | null {

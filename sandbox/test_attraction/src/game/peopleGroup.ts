@@ -2,16 +2,15 @@ import { PeopleGroup, Vector2, GameConfig, GroupType } from '../types';
 import { randomInt, generateId } from './utils';
 
 export const GROUP_CONFIGS: Record<GroupType, { minSize: number; maxSize: number; color: string }> = {
-  solo: { minSize: 1, maxSize: 1, color: '#ff6b9d' },
-  couple: { minSize: 2, maxSize: 2, color: '#4ecdc4' },
-  family: { minSize: 3, maxSize: 5, color: '#ffe66d' },
-  friends: { minSize: 3, maxSize: 6, color: '#a8dadc' },
+  single_group: { minSize: 1, maxSize: 1, color: '#ff6b9d' },
+  small_group: { minSize: 2, maxSize: 3, color: '#4ecdc4' },
+  big_group: { minSize: 4, maxSize: 6, color: '#ffe66d' },
 };
 
 const randomPick = <T>(array: T[]): T => array[Math.floor(Math.random() * array.length)];
 
 export function createPeopleGroup(spawnPosition: Vector2, config: GameConfig): PeopleGroup {
-  const type = randomPick<GroupType>(['solo', 'couple', 'family', 'friends']);
+  const type = randomPick<GroupType>(['single_group', 'small_group', 'big_group']);
   const groupConfig = GROUP_CONFIGS[type];
   const size = randomInt(groupConfig.minSize, groupConfig.maxSize);
   return {

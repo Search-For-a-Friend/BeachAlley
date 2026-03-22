@@ -5,7 +5,7 @@ export interface Vector2 {
   y: number;
 }
 
-export type GroupType = 'solo' | 'couple' | 'family' | 'friends';
+export type GroupType = 'single_group' | 'small_group' | 'big_group';
 
 export type GroupState =
   | 'spawning'

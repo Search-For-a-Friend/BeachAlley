@@ -9,6 +9,7 @@ import { CANVAS_CONFIG } from './config';
 import { GameState } from '../types';
 import { TerrainMap } from '../types/environment';
 import { GroupBehavior } from '../game/GroupBehavior';
+import { IndividualManager } from '../game/Individual';
 
 type SpriteManifest = {
   name: string;
@@ -268,6 +269,7 @@ export interface InteractiveCanvasProps {
   onZoomChange?: (level: number) => void;
   onCameraSystemRef?: (cameraSystem: any) => void;
   groupBehavior?: GroupBehavior; // Add groupBehavior for settlement area access
+  individualManager?: IndividualManager; // Add individualManager for individual rendering
 }
 
 export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
@@ -285,6 +287,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   onZoomChange,
   onCameraSystemRef,
   groupBehavior,
+  individualManager,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -318,6 +321,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const animationFrameRef = useRef<number | null>(null);
 
   const peopleSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
+  const singleGroupSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
   const smallGroupSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
   const bigGroupSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
 
@@ -329,28 +333,35 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     const run = async () => {
       try {
         const individualManifestUrl = new URL('../../assets/sprites/people/individual/manifest.json', import.meta.url);
-        const smallGroupManifestUrl = new URL('../../assets/sprites/people/small_group/manifest.json', import.meta.url);
-        const bigGroupManifestUrl = new URL('../../assets/sprites/people/big_group/manifest.json', import.meta.url);
+        const singleGroupManifestUrl = new URL('../../assets/sprites/people/group/single_group/manifest.json', import.meta.url);
+        const smallGroupManifestUrl = new URL('../../assets/sprites/people/group/small_group/manifest.json', import.meta.url);
+        const bigGroupManifestUrl = new URL('../../assets/sprites/people/group/big_group/manifest.json', import.meta.url);
 
-        const [individualManifest, smallGroupManifest, bigGroupManifest] = await Promise.all([
+        const [individualManifest, singleGroupManifest, smallGroupManifest, bigGroupManifest] = await Promise.all([
           loadSpriteManifest(individualManifestUrl),
+          loadSpriteManifest(singleGroupManifestUrl),
           loadSpriteManifest(smallGroupManifestUrl),
           loadSpriteManifest(bigGroupManifestUrl),
         ]);
 
         const individualImageUrl = new URL(`../../assets/sprites/people/individual/${individualManifest.spritesheet}`, import.meta.url);
-        const smallGroupImageUrl = new URL(`../../assets/sprites/people/small_group/${smallGroupManifest.spritesheet}`, import.meta.url);
-        const bigGroupImageUrl = new URL(`../../assets/sprites/people/big_group/${bigGroupManifest.spritesheet}`, import.meta.url);
+        const singleGroupImageUrl = new URL(`../../assets/sprites/people/group/single_group/${singleGroupManifest.spritesheet}`, import.meta.url);
+        const smallGroupImageUrl = new URL(`../../assets/sprites/people/group/small_group/${smallGroupManifest.spritesheet}`, import.meta.url);
+        const bigGroupImageUrl = new URL(`../../assets/sprites/people/group/big_group/${bigGroupManifest.spritesheet}`, import.meta.url);
 
-        const [individualImage, smallGroupImage, bigGroupImage] = await Promise.all([
+        const [individualImage, singleGroupImage, smallGroupImage, bigGroupImage] = await Promise.all([
           loadImage(individualImageUrl),
+          loadImage(singleGroupImageUrl),
           loadImage(smallGroupImageUrl),
           loadImage(bigGroupImageUrl),
         ]);
 
         if (cancelled) return;
 
+        // For individual system (visual representation of individuals)
         peopleSpriteRef.current = { manifest: individualManifest, image: individualImage };
+        // For group rendering
+        singleGroupSpriteRef.current = { manifest: singleGroupManifest, image: singleGroupImage };
         smallGroupSpriteRef.current = { manifest: smallGroupManifest, image: smallGroupImage };
         bigGroupSpriteRef.current = { manifest: bigGroupManifest, image: bigGroupImage };
         setSpritesReady(true);
@@ -509,37 +520,37 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           
           const radius = 8 + g.size * 2;
 
-          // People sprite (fallback to circle)
-          const peopleSprite = (() => {
-            if (g.size === 1) return peopleSpriteRef.current; // 1 person = individual sprite
-            if (g.size <= 3) return smallGroupSpriteRef.current; // 2-3 people = small group sprite
-            return bigGroupSpriteRef.current; // 4+ people = big group sprite
+          // Group sprite (fallback to circle)
+          const groupSprite = (() => {
+            if (g.size === 1) return singleGroupSpriteRef.current; // 1 person = single_group sprite
+            if (g.size <= 3) return smallGroupSpriteRef.current; // 2-3 people = small_group sprite
+            return bigGroupSpriteRef.current; // 4+ people = big_group sprite
           })();
 
-          if (spritesReady && peopleSprite) {
+          if (spritesReady && groupSprite) {
             const spriteState = getPeopleSpriteState(g.facingDirection);
-            const stateInfo = peopleSprite.manifest.states[spriteState] ?? peopleSprite.manifest.states.look_down;
+            const stateInfo = groupSprite.manifest.states[spriteState] ?? groupSprite.manifest.states.look_down;
             const framesPerState = stateInfo?.frames ?? 2;
 
             const anim = groupAnimRef.current.get(g.id) ?? {
               frameIndex: 0,
               lastFrameTime: 0,
             };
-            const animSpeed = peopleSprite.manifest.animationSpeed ?? 300;
+            const animSpeed = groupSprite.manifest.animationSpeed ?? 300;
             if (now - anim.lastFrameTime > animSpeed) {
               anim.frameIndex = (anim.frameIndex + 1) % framesPerState;
               anim.lastFrameTime = now;
               groupAnimRef.current.set(g.id, anim);
             }
 
-            const variants = peopleSprite.manifest.variants ?? [];
+            const variants = groupSprite.manifest.variants ?? [];
             const variantIndex = variants.length
               ? stableStringHash(g.id + String(g.type ?? '')) % variants.length
               : 0;
             const variantCol = variants[variantIndex]?.column ?? 0;
 
-            const frameW = peopleSprite.manifest.frameWidth;
-            const frameH = peopleSprite.manifest.frameHeight;
+            const frameW = groupSprite.manifest.frameWidth;
+            const frameH = groupSprite.manifest.frameHeight;
 
             const sx = (variantCol * framesPerState + anim.frameIndex) * frameW;
             const sy = (stateInfo?.row ?? 0) * frameH;
@@ -547,11 +558,11 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             const zoom = cameraSystem.getState().zoom;
             const dw = frameW * zoom;
             const dh = frameH * zoom;
-            const ax = peopleSprite.manifest.anchorX ?? 0.5;
-            const ay = peopleSprite.manifest.anchorY ?? 0.9;
+            const ax = groupSprite.manifest.anchorX ?? 0.5;
+            const ay = groupSprite.manifest.anchorY ?? 0.9;
 
             ctx.drawImage(
-              peopleSprite.image,
+              groupSprite.image,
               sx,
               sy,
               frameW,
@@ -620,6 +631,121 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             drawGroupStateIndicator(ctx, g, screenX, screenY + scaledH / 2);
           }
         });
+
+        // Draw individuals with viewport culling
+        if (individualManager) {
+          const allIndividuals = individualManager.getAllIndividuals();
+          allIndividuals.forEach(individual => {
+            const col = individual.position.x;
+            const row = individual.position.y;
+            const worldX = (col - row) * (CANVAS_CONFIG.TILE_WIDTH / 2);
+            const worldY = (col + row) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
+            const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+            
+            // Viewport culling - don't render off-screen individuals
+            const cullMargin = 50; // Extra margin for smooth appearance
+            if (screenX < -cullMargin || screenX > canvasSize.width + cullMargin ||
+                screenY < -cullMargin || screenY > canvasSize.height + cullMargin) {
+              return; // Skip rendering this individual
+            }
+            
+            // Draw individual using individual sprites
+            const individualSprite = peopleSpriteRef.current;
+            
+            if (spritesReady && individualSprite) {
+              // Calculate individual facing direction based on movement
+              let facingDirection: 'up' | 'down' | 'left' | 'right' = 'down';
+              if (individual.targetPosition) {
+                const dx = individual.targetPosition.x - individual.position.x;
+                const dy = individual.targetPosition.y - individual.position.y;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                  facingDirection = dx > 0 ? 'right' : 'left';
+                } else {
+                  facingDirection = dy > 0 ? 'down' : 'up';
+                }
+              }
+              
+              const spriteState = getPeopleSpriteState(facingDirection);
+              const stateInfo = individualSprite.manifest.states[spriteState] ?? individualSprite.manifest.states.look_down;
+              const framesPerState = stateInfo?.frames ?? 2;
+
+              // Simple animation for individuals
+              const animSpeed = individualSprite.manifest.animationSpeed ?? 300;
+              const frameIndex = Math.floor((now / animSpeed) % framesPerState);
+
+              const frameW = individualSprite.manifest.frameWidth;
+              const frameH = individualSprite.manifest.frameHeight;
+
+              const sx = frameIndex * frameW;
+              const sy = (stateInfo?.row ?? 0) * frameH;
+
+              const zoom = cameraSystem.getState().zoom;
+              const dw = frameW * zoom * 0.5; // Make individuals smaller than groups
+              const dh = frameH * zoom * 0.5;
+              const ax = individualSprite.manifest.anchorX ?? 0.5;
+              const ay = individualSprite.manifest.anchorY ?? 0.9;
+
+              ctx.drawImage(
+                individualSprite.image,
+                sx,
+                sy,
+                frameW,
+                frameH,
+                screenX - dw * ax,
+                screenY - dh * ay,
+                dw,
+                dh
+              );
+              
+              // Draw small indicator for enjoying state
+              if (individual.state === 'enjoying') {
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 8px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('😊', screenX, screenY - dh * 0.5);
+              }
+              
+              // Draw target line if seeking
+              if (individual.state === 'seeking' && individual.targetPosition) {
+                const targetCol = individual.targetPosition.x;
+                const targetRow = individual.targetPosition.y;
+                const targetWorldX = (targetCol - targetRow) * (CANVAS_CONFIG.TILE_WIDTH / 2);
+                const targetWorldY = (targetCol + targetRow) * (CANVAS_CONFIG.TILE_HEIGHT / 2);
+                const { screenX: targetScreenX, screenY: targetScreenY } = cameraSystem.worldToScreen(targetWorldX, targetWorldY);
+                
+                ctx.strokeStyle = 'rgba(255, 165, 0, 0.5)'; // Orange with transparency
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 2]);
+                ctx.beginPath();
+                ctx.moveTo(screenX, screenY);
+                ctx.lineTo(targetScreenX, targetScreenY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+              }
+            } else {
+              // Fallback: Draw individual as small circle with state-based color
+              const radius = 4; // Smaller than groups
+              
+              // State-based colors
+              let color = '#FFD700'; // Default gold
+              switch (individual.state) {
+                case 'seeking': color = '#FFA500'; break;       // Orange
+                case 'enjoying': color = '#00FF00'; break;      // Green
+                case 'returning': color = '#87CEEB'; break;     // Sky blue
+                case 'inactive': color = '#808080'; break;      // Gray
+              }
+              
+              ctx.fillStyle = color;
+              ctx.strokeStyle = '#000';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.stroke();
+            }
+          });
+        }
       }
 
       animationFrameRef.current = requestAnimationFrame(render);

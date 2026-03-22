@@ -1,4 +1,5 @@
 import { PeopleGroup, Vector2 } from '../types';
+import { setGroupState } from './peopleGroup';
 
 export interface SettlementRequirements {
   // Future settlement requirements will go here
@@ -93,11 +94,11 @@ export class GroupBehavior {
    */
   private getSettlementAreaSize(groupSize: number): { width: number; height: number } {
     if (groupSize === 1) {
-      return { width: 2, height: 1 }; // Individual: 2x1 tiles
+      return { width: 2, height: 1 }; // Single group: 2x1 tiles
     } else if (groupSize <= 3) {
       return { width: 2, height: 2 }; // Small group: 2x2 tiles
     } else {
-      return { width: 3, height: 3 }; // Large group: 3x3 tiles
+      return { width: 3, height: 3 }; // Big group: 3x3 tiles
     }
   }
 
@@ -125,7 +126,7 @@ export class GroupBehavior {
    */
   private generateSettlementDuration(groupSize: number): number {
     if (groupSize === 1) {
-      // Individual: most random range (short to long)
+      // Single group: most random range (short to long)
       const range = this.settlementDurations.individual;
       return Math.random() * (range.max - range.min) + range.min;
     } else if (groupSize <= 3) {
@@ -133,7 +134,7 @@ export class GroupBehavior {
       const range = this.settlementDurations.smallGroup;
       return Math.random() * (range.max - range.min) + range.min;
     } else {
-      // Big group: very long durations
+      // Big group: longer durations
       const range = this.settlementDurations.bigGroup;
       return Math.random() * (range.max - range.min) + range.min;
     }
@@ -142,7 +143,7 @@ export class GroupBehavior {
   /**
    * Check if settlement is possible at the given tile position (multi-tile aware)
    */
-  public canSettle(tileX: number, tileY: number, groupSize: number, groupId: string): boolean {
+  public canSettle(tileX: number, tileY: number, groupSize: number, _groupId: string): boolean {
     const areaSize = this.getSettlementAreaSize(groupSize);
     const areaTiles = this.getSettlementAreaTiles(tileX, tileY, areaSize.width, areaSize.height);
     
@@ -154,31 +155,14 @@ export class GroupBehavior {
       }
     }
     
-    // Apply group size settlement rules
+    // Apply group size settlement rules (pure check, no side effects)
     if (groupSize === 1) {
-      // Individuals can settle anywhere (as long as area is free)
+      // Single groups can settle anywhere (as long as area is free)
       return true;
     } else if (groupSize <= 3) {
       // Small groups (2-3) settle near other groups (1-3 tiles away)
       const hasNearby = this.hasNearbyGroups(tileX, tileY, 1, 3);
-      
-      if (hasNearby) {
-        // Reset failed attempts on successful settlement condition
-        this.failedSettlementAttempts.delete(groupId);
-        return true;
-      } else {
-        // Track failed attempt
-        const attempts = (this.failedSettlementAttempts.get(groupId) || 0) + 1;
-        this.failedSettlementAttempts.set(groupId, attempts);
-        
-        // After 3 failed attempts, allow settling anywhere
-        if (attempts >= 3) {
-          console.log(`Group ${groupId} (${groupSize} people) settling anywhere after ${attempts} failed attempts`);
-          this.failedSettlementAttempts.delete(groupId);
-          return true;
-        }
-        return false;
-      }
+      return hasNearby;
     } else {
       // Big groups (4+) settle away from other groups (at least 5 tiles away)
       return this.hasNoNearbyGroups(tileX, tileY, 5);
@@ -209,15 +193,50 @@ export class GroupBehavior {
   }
 
   /**
+   * Try to settle a group at the given tile position (manages failed attempts)
+   */
+  public trySettle(group: PeopleGroup, tileX: number, tileY: number, currentTime: number): void {
+    // First check if settlement is possible
+    if (!this.canSettle(tileX, tileY, group.size, group.id)) {
+      // Track failed attempt for small groups
+      if (group.size <= 3 && group.size > 1) {
+        const attempts = (this.failedSettlementAttempts.get(group.id) || 0) + 1;
+        this.failedSettlementAttempts.set(group.id, attempts);
+        
+        // After 3 failed attempts, allow settling anywhere
+        if (attempts >= 3) {
+          console.log(`Group ${group.id} (${group.size} people) settling anywhere after ${attempts} failed attempts`);
+          // Force settlement by bypassing canSettle
+          this.settleGroup(group, tileX, tileY, currentTime);
+          return;
+        }
+      }
+      
+      // Can't settle, find new target
+      group.targetPosition = null;
+      setGroupState(group, 'idle');
+      return;
+    }
+    
+    // Can settle normally
+    this.settleGroup(group, tileX, tileY, currentTime);
+  }
+
+  /**
    * Settle a group at the given tile position (multi-tile aware)
    */
-  public settleGroup(group: PeopleGroup, tileX: number, tileY: number): void {
-    if (!this.canSettle(tileX, tileY, group.size, group.id)) {
-      return; // Cannot settle here
-    }
-
+  public settleGroup(group: PeopleGroup, tileX: number, tileY: number, currentTime: number): void {
+    // Only check basic tile availability, not canSettle (which would reset failed attempts)
     const areaSize = this.getSettlementAreaSize(group.size);
     const areaTiles = this.getSettlementAreaTiles(tileX, tileY, areaSize.width, areaSize.height);
+    
+    // Check if any tile in area is already occupied
+    for (const tile of areaTiles) {
+      const tileKey = `${tile.x},${tile.y}`;
+      if (this.occupiedTiles.has(tileKey)) {
+        return; // Cannot settle here - area occupied
+      }
+    }
 
     // Mark group as settled
     const position = { x: tileX, y: tileY };
@@ -232,10 +251,13 @@ export class GroupBehavior {
     
     this.spatialGrid.addGroup(group.id, position); // Add center to spatial grid
     
+    // Reset failed attempts ONLY when group is actually settled
+    this.failedSettlementAttempts.delete(group.id);
+    
     // Set group state to settled with random duration
     group.state = 'settled';
     group.targetPosition = null;
-    group.settledAt = Date.now(); // Set settled time
+    group.settledAt = currentTime; // Set settled time
     
     // Store individual settlement duration for this group
     const settlementDuration = this.generateSettlementDuration(group.size);
@@ -267,23 +289,27 @@ export class GroupBehavior {
   /**
    * Update settled groups and check if any should leave settlement
    */
-  public updateSettledGroups(groups: PeopleGroup[], currentTime: number): void {
+  public updateSettledGroups(groups: PeopleGroup[], _currentTime: number): void {
     this.updateAllGroups(groups); // Update spatial grid first
     
-    for (const group of groups) {
-      if (group.state !== 'settled') continue;
-      
-      const settledPosition = this.settledGroups.get(group.id);
-      if (!settledPosition) continue;
+    // NOTE: Group leaving is now handled by the individual-based system in GameEngine
+    // This old time-based leaving system is disabled to prevent conflicts
+    // Groups now leave only when all their individuals have completed cycles
+    
+    // for (const group of groups) {
+    //   if (group.state !== 'settled') continue;
+    //   
+    //   const settledPosition = this.settledGroups.get(group.id);
+    //   if (!settledPosition) continue;
 
-      // Check if group should leave settlement (after fixed duration)
-      // For now, all groups leave after the same duration
-      const shouldLeave = this.shouldLeaveSettlement(group, currentTime);
-      
-      if (shouldLeave) {
-        this.unsettleGroup(group);
-      }
-    }
+    //   // Check if group should leave settlement (after fixed duration)
+    //   // For now, all groups leave after the same duration
+    //   const shouldLeave = this.shouldLeaveSettlement(group, currentTime);
+    //   
+    //   if (shouldLeave) {
+    //     this.unsettleGroup(group);
+    //   }
+    // }
   }
 
   /**
@@ -323,16 +349,7 @@ export class GroupBehavior {
     }
   }
 
-  /**
-   * Check if a group should leave settlement based on time
-   */
-  private shouldLeaveSettlement(group: PeopleGroup, currentTime: number): boolean {
-    // Use the individual group's settlement duration
-    const settledAt = group.settledAt || currentTime;
-    const settlementDuration = (group as any).settlementDuration || 10000; // Fallback to 10s
-    
-    return currentTime - settledAt >= settlementDuration;
-  }
+  // Old time-based leaving system removed - now using individual-based system in GameEngine
 
   /**
    * Get all tiles occupied by settled groups (for visual feedback)

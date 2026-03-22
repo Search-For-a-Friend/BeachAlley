@@ -5,6 +5,7 @@ import { GameState } from '../types';
 import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
 import { GroupDetailsPanel } from '../components/GroupDetailsPanel';
 import { GroupBehavior } from '../game/GroupBehavior';
+import { IndividualManager } from '../game/Individual';
 import Logger from '../utils/Logger';
 
 interface LayoutTabbedProps {
@@ -18,6 +19,7 @@ interface LayoutTabbedProps {
   spawnTilePosition?: { x: number; y: number } | null;
   onCameraSystemRef?: (cameraSystem: any) => void;
   groupBehavior?: GroupBehavior;
+  individualManager?: IndividualManager;
 }
 
 type Tab = 'game' | 'build' | 'manage';
@@ -36,6 +38,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   spawnTilePosition,
   onCameraSystemRef,
   groupBehavior,
+  individualManager,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab | null>('game');
   const [openDrawer, setOpenDrawer] = useState<DrawerType>(null);
@@ -253,6 +256,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           onZoomChange={setZoomLevel}
           onCameraSystemRef={onCameraSystemRef}
           groupBehavior={groupBehavior}
+          individualManager={individualManager}
         />
         
                 

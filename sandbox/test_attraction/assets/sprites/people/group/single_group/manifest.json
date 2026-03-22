@@ -1,0 +1,36 @@
+{
+  "name": "individual",
+  "type": "people",
+  "category": "individual",
+  "description": "Single person visitor",
+  "groupSizeRange": [1, 1],
+  "spritesheet": "spritesheet.svg",
+  "frameWidth": 64,
+  "frameHeight": 64,
+  "anchorX": 0.5,
+  "anchorY": 0.9,
+  "animationSpeed": 300,
+  "states": {
+    "look_down": {
+      "row": 0,
+      "frames": 2,
+      "description": "Facing camera/south"
+    },
+    "look_up": {
+      "row": 1,
+      "frames": 2,
+      "description": "Facing away/north"
+    },
+    "look_side": {
+      "row": 2,
+      "frames": 2,
+      "description": "Facing left or right"
+    }
+  },
+  "variants": [
+    { "name": "tourist_1", "column": 0 },
+    { "name": "tourist_2", "column": 1 },
+    { "name": "tourist_3", "column": 2 },
+    { "name": "tourist_4", "column": 3 }
+  ]
+}
