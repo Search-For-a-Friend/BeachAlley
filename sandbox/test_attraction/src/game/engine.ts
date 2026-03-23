@@ -18,6 +18,7 @@ import {
 } from './peopleGroup';
 import { distance, moveTowards } from './utils';
 import { GridManager } from './GridManager';
+import { TimeManager } from '../systems/TimeManager';
 import { GroupBehavior } from './GroupBehavior';
 import { IndividualManager } from './Individual';
 import { TerrainMap } from '../types/environment';
@@ -34,6 +35,7 @@ export class GameEngine {
   private groupBehavior: GroupBehavior;
   private individualManager: IndividualManager;
   private terrainMap: TerrainMap;
+  private timeManager: TimeManager;
   private lastSpawnTime: number = 0;
   private animationFrameId: number | null = null;
   /** Spawn tile centers (x, y) for exit and spawn. */
@@ -53,6 +55,10 @@ export class GameEngine {
     this.terrainMap = terrainMap;
     this.gridManager = new GridManager(this.terrainMap.width, this.terrainMap.height);
     this.individualManager = new IndividualManager(terrainMap);
+    this.timeManager = new TimeManager({
+      dayDurationMinutes: 10, // 10 real minutes = 1 game day
+      startTimeHour: 9 // Start at 9 AM
+    });
     this.groupBehavior = new GroupBehavior({
       settlementDurations: {
         individual: { min: 50000, max: 200000 },  // 50-200 seconds (short to long range)
@@ -229,6 +235,13 @@ export class GameEngine {
     return this.individualManager;
   }
 
+  /**
+   * Get the time manager
+   */
+  public getTimeManager(): TimeManager {
+    return this.timeManager;
+  }
+
   
   public on(event: GameEvent): void {
     this.eventQueue.push(event);
@@ -266,6 +279,9 @@ export class GameEngine {
     if (this.state.isPaused) return;
 
     this.state.time += deltaTime;
+    
+    // Update time manager
+    this.timeManager.update();
 
     // Process event queue first
     this.processEventQueue();

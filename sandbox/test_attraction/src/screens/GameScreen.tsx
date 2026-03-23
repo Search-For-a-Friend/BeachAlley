@@ -3,6 +3,7 @@ import { LayoutTabbed } from '../layouts/LayoutTabbed';
 import { GameEngine } from '../game/engine';
 import { TerrainMap } from '../types/environment';
 import { GameState, GameEvent } from '../types';
+import { TimeDisplay } from '../components/TimeDisplay';
 
 interface GameScreenProps {
   terrainMap: TerrainMap;
@@ -72,6 +73,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ terrainMap, onBackToMenu
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
+      {engineRef.current && (
+        <TimeDisplay timeManager={engineRef.current.getTimeManager()} />
+      )}
       <LayoutTabbed
         onBack={onBackToMenu}
         onChangeLayout={() => {}}
