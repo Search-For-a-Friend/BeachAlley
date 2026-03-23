@@ -360,6 +360,11 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
         // For individual system (visual representation of individuals)
         peopleSpriteRef.current = { manifest: individualManifest, image: individualImage };
+        console.log('Individual sprite loaded:', { 
+          manifest: individualManifest.name, 
+          imageLoaded: !!individualImage,
+          imageSize: individualImage?.width + 'x' + individualImage?.height 
+        });
         // For group rendering
         singleGroupSpriteRef.current = { manifest: singleGroupManifest, image: singleGroupImage };
         smallGroupSpriteRef.current = { manifest: smallGroupManifest, image: smallGroupImage };
@@ -632,10 +637,12 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }
         });
 
-        // Draw individuals with viewport culling
+        // Draw individuals with viewport culling (only those not in group)
         if (individualManager) {
           const allIndividuals = individualManager.getAllIndividuals();
-          allIndividuals.forEach(individual => {
+          const activeIndividuals = allIndividuals.filter(individual => individual.state !== 'in_group');
+          console.log('Rendering individuals:', activeIndividuals.length, 'Total:', allIndividuals.length, 'Sprites ready:', spritesReady);
+          activeIndividuals.forEach(individual => {
             const col = individual.position.x;
             const row = individual.position.y;
             const worldX = (col - row) * (CANVAS_CONFIG.TILE_WIDTH / 2);

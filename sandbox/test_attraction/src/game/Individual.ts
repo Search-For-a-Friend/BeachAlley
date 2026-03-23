@@ -4,7 +4,7 @@ export interface Vector2 {
 }
 
 export type IndividualState = 
-  | 'spawning'      // Just created from group
+  | 'in_group' 
   | 'seeking'       // Moving toward activity
   | 'enjoying'      // At activity, gaining enjoyment
   | 'returning'     // Moving back to parent group
@@ -136,7 +136,42 @@ export class IndividualManager {
     this.activityManager = new ActivityManager(terrainMap);
   }
 
-  // Create a new individual that leaves the group
+  // Dispatch an individual from group (changes state to seeking)
+  dispatchIndividual(groupId: string, groupPosition: Vector2): Individual | null {
+    const groupIndividuals = this.groupIndividuals.get(groupId);
+    if (!groupIndividuals) return null;
+    
+    // Find an individual in "in_group" state
+    let individualToDispatch: Individual | undefined;
+    for (const individual of groupIndividuals.individuals.values()) {
+      if (individual.state === 'in_group') {
+        individualToDispatch = individual;
+        break;
+      }
+    }
+    
+    if (!individualToDispatch) return null;
+    
+    // Update individual to seeking state and set position at group location
+    individualToDispatch.state = 'seeking';
+    individualToDispatch.position = { ...groupPosition };
+    individualToDispatch.returnPosition = { ...groupPosition };
+    
+    // Increment left group count
+    groupIndividuals.leftGroupCount++;
+    
+    console.log('Individual dispatched:', {
+      id: individualToDispatch.id,
+      groupId,
+      state: individualToDispatch.state,
+      leftCount: groupIndividuals.leftGroupCount,
+      remainingInGroup: Array.from(groupIndividuals.individuals.values()).filter(i => i.state === 'in_group').length
+    });
+    
+    return individualToDispatch;
+  }
+
+  // Create an individual (leaves group immediately) - DEPRECATED, use dispatchIndividual instead
   createIndividual(groupId: string, groupPosition: Vector2, _groupSize: number): Individual | null {
     const groupIndividuals = this.groupIndividuals.get(groupId);
     if (!groupIndividuals || groupIndividuals.leftGroupCount >= groupIndividuals.maxIndividuals) {
@@ -158,7 +193,17 @@ export class IndividualManager {
 
     // Add to tracking
     groupIndividuals.individuals.set(individual.id, individual);
+    this.individuals.set(individual.id, individual);  // ✅ Add to main tracking
     groupIndividuals.leftGroupCount++;
+
+    console.log('Individual created:', {
+      id: individual.id,
+      groupId: individual.groupId,
+      state: individual.state,
+      totalInGroup: groupIndividuals.individuals.size,
+      leftCount: groupIndividuals.leftGroupCount,
+      mainTrackingCount: this.individuals.size
+    });
 
     return individual;
   }
@@ -166,6 +211,9 @@ export class IndividualManager {
   // Update individual logic
   updateIndividual(individual: Individual, deltaTime: number): void {
     switch (individual.state) {
+      case 'in_group':
+        // Individuals in group don't move, just stay at group position
+        break;
       case 'seeking':
         this.updateSeeking(individual, deltaTime);
         break;
@@ -268,12 +316,40 @@ export class IndividualManager {
 
   // Initialize group individuals tracking
   initializeGroupIndividuals(groupId: string, groupSize: number): void {
+    const individuals: Map<string, Individual> = new Map();
+    
+    // Create all individuals in "in_group" state initially
+    for (let i = 0; i < groupSize; i++) {
+      const individual: Individual = {
+        id: `individual_${this.nextIndividualId++}`,
+        groupId,
+        position: { x: 0, y: 0 }, // Will be set by group position
+        targetPosition: null,
+        state: 'in_group', // Start in group (not seeking)
+        activityTarget: null,
+        returnPosition: { x: 0, y: 0 }, // Will be set by group position
+        enjoymentStartTime: 0,
+        enjoymentDuration: this.BASE_ENJOYMENT_DURATION + Math.random() * 2000,
+        speed: this.INDIVIDUAL_SPEED
+      };
+      
+      individuals.set(individual.id, individual);
+      this.individuals.set(individual.id, individual);
+    }
+    
     this.groupIndividuals.set(groupId, {
       groupId,
-      individuals: new Map(),
+      individuals,
       maxIndividuals: groupSize,
       leftGroupCount: 0,
       canLeave: false
+    });
+    
+    console.log('Initialized group with individuals:', {
+      groupId,
+      groupSize,
+      createdCount: individuals.size,
+      mainTrackingCount: this.individuals.size
     });
   }
 
@@ -297,6 +373,13 @@ export class IndividualManager {
     const individual = this.individuals.get(individualId);
     if (!individual) return;
     
+    console.log('Individual removed:', {
+      id: individualId,
+      groupId: individual.groupId,
+      state: individual.state,
+      reason: 'Returning to group or cleanup'
+    });
+    
     // Remove from main tracking
     this.individuals.delete(individualId);
     
@@ -304,6 +387,11 @@ export class IndividualManager {
     const groupIndividuals = this.groupIndividuals.get(individual.groupId);
     if (groupIndividuals) {
       groupIndividuals.individuals.delete(individualId);
+      console.log('Group individuals after removal:', {
+        groupId: individual.groupId,
+        remainingCount: groupIndividuals.individuals.size,
+        leftCount: groupIndividuals.leftGroupCount
+      });
     }
     
     // Release any activity
@@ -312,13 +400,14 @@ export class IndividualManager {
     }
   }
 
-  // Check if group can leave (all individuals left exactly once)
+  // Check if group can leave (all individuals left exactly once AND returned)
   canGroupLeave(groupId: string): boolean {
     const groupIndividuals = this.groupIndividuals.get(groupId);
     if (!groupIndividuals) return true;
     
-    // Group can only leave if each individual has left exactly once
-    return groupIndividuals.leftGroupCount >= groupIndividuals.maxIndividuals;
+    // Group can only leave if each individual has left exactly once AND all have returned
+    return groupIndividuals.leftGroupCount >= groupIndividuals.maxIndividuals && 
+           groupIndividuals.individuals.size === 0; // All individuals have returned
   }
 
   // Call back all individuals for a group

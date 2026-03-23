@@ -8,6 +8,7 @@ import { GroupBehavior } from '../game/GroupBehavior';
 import { IndividualManager } from '../game/Individual';
 import Logger from '../utils/Logger';
 
+
 interface LayoutTabbedProps {
   onBack: () => void;
   onChangeLayout: () => void;
@@ -305,6 +306,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               gameState={gameState}
               selectedGroup={selectedGroupId && gameState ? gameState.groups.find(g => g.id === selectedGroupId) || null : null}
               setSelectedGroupId={setSelectedGroupId}
+              individualManager={individualManager}
             />
           </div>
         )}
@@ -334,6 +336,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
               gameState={gameState}
               selectedGroup={selectedGroupId && gameState ? gameState.groups.find(g => g.id === selectedGroupId) || null : null}
               setSelectedGroupId={setSelectedGroupId}
+              individualManager={individualManager}
             />
           )}
         </div>
@@ -559,7 +562,8 @@ const DrawerContent: React.FC<{
   gameState?: GameState | null;
   selectedGroup?: any;
   setSelectedGroupId?: (id: string | null) => void;
-}> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId }) => {
+  individualManager?: IndividualManager;
+}> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId, individualManager }) => {
   const getContent = () => {
     switch (type) {
       case 'statistics':
@@ -588,6 +592,7 @@ const DrawerContent: React.FC<{
                   <GroupDetailsPanel 
                     group={selectedGroup} 
                     onClose={() => setSelectedGroupId && setSelectedGroupId(null)} 
+                    individualManager={individualManager as IndividualManager}
                   />
                   <div style={styles.divider} />
                 </>

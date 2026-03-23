@@ -1,12 +1,14 @@
 import React from 'react';
 import { PeopleGroup } from '../types';
+import { IndividualManager } from '../game/Individual';
 
 interface GroupDetailsPanelProps {
   group: PeopleGroup | null;
   onClose: () => void;
+  individualManager?: IndividualManager;
 }
 
-export const GroupDetailsPanel: React.FC<GroupDetailsPanelProps> = ({ group, onClose }) => {
+export const GroupDetailsPanel: React.FC<GroupDetailsPanelProps> = ({ group, onClose, individualManager }) => {
   if (!group) {
     return (
       <div style={styles.emptyState}>
@@ -84,6 +86,74 @@ export const GroupDetailsPanel: React.FC<GroupDetailsPanelProps> = ({ group, onC
             <span style={styles.value}>{group.type}</span>
           </div>
         </div>
+
+        {/* Individuals List */}
+        {individualManager && (
+          <div style={styles.section}>
+            <h4 style={styles.sectionTitle}>Individuals Status</h4>
+            {(() => {
+              const groupIndividuals = individualManager.getGroupIndividuals(group.id);
+              if (!groupIndividuals) {
+                return (
+                  <div style={styles.row}>
+                    <span style={styles.label}>Individuals:</span>
+                    <span style={styles.value}>Not initialized</span>
+                  </div>
+                );
+              }
+
+              const individuals = Array.from(groupIndividuals.individuals.values());
+              const inGroupIndividuals = individuals.filter(i => i.state === 'in_group');
+              const activeIndividuals = individuals.filter(i => i.state !== 'in_group');
+              
+              return (
+                <div>
+                  <div style={styles.row}>
+                    <span style={styles.label}>Total Individuals:</span>
+                    <span style={styles.value}>{groupIndividuals.maxIndividuals}</span>
+                  </div>
+                  <div style={styles.row}>
+                    <span style={styles.label}>In Group:</span>
+                    <span style={styles.value}>{inGroupIndividuals.length}</span>
+                  </div>
+                  <div style={styles.row}>
+                    <span style={styles.label}>Left Group:</span>
+                    <span style={styles.value}>{groupIndividuals.leftGroupCount}</span>
+                  </div>
+                  <div style={styles.row}>
+                    <span style={styles.label}>Active Individuals:</span>
+                    <span style={styles.value}>{activeIndividuals.length}</span>
+                  </div>
+                  {activeIndividuals.length > 0 && (
+                    <div style={styles.individualsList}>
+                      <div style={styles.individualsHeader}>Active Individuals:</div>
+                      {activeIndividuals.map(individual => (
+                        <div key={individual.id} style={styles.individualItem}>
+                          <span style={styles.individualId}>{individual.id.slice(-6)}</span>
+                          <span style={styles.individualState}>{individual.state}</span>
+                          {individual.activityTarget && (
+                            <span style={styles.individualTarget}>→ Activity</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {inGroupIndividuals.length > 0 && (
+                    <div style={styles.individualsList}>
+                      <div style={styles.individualsHeader}>In Group (Waiting):</div>
+                      {inGroupIndividuals.map(individual => (
+                        <div key={individual.id} style={styles.individualItem}>
+                          <span style={styles.individualId}>{individual.id.slice(-6)}</span>
+                          <span style={{ ...styles.individualState, color: '#888' }}>{individual.state}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Current State */}
         <div style={styles.section}>
@@ -281,5 +351,46 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#aaa',
     fontSize: '13px',
     textAlign: 'center',
+  },
+  individualsList: {
+    marginTop: '8px',
+    padding: '8px',
+    backgroundColor: 'rgba(0, 255, 255, 0.05)',
+    borderRadius: '4px',
+    border: '1px solid rgba(0, 255, 255, 0.2)',
+  },
+  individualsHeader: {
+    color: '#00ffff',
+    fontSize: '11px',
+    fontWeight: 'bold',
+    marginBottom: '4px',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+  },
+  individualItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '4px 8px',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: '3px',
+    marginBottom: '2px',
+    fontSize: '11px',
+  },
+  individualId: {
+    color: '#ff0080',
+    fontFamily: 'monospace',
+    fontSize: '10px',
+    minWidth: '60px',
+  },
+  individualState: {
+    color: '#00ff00',
+    fontSize: '10px',
+    minWidth: '80px',
+  },
+  individualTarget: {
+    color: '#ffff00',
+    fontSize: '10px',
+    fontStyle: 'italic',
   },
 };

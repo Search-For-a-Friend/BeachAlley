@@ -455,19 +455,18 @@ export class GameEngine {
 
       const lastSpawnTime = this.lastIndividualSpawnTime.get(group.id) || 0;
       
-      // Check if it's time to spawn a new individual (leave group)
+      // Check if it's time to dispatch a new individual (leave group)
       if (now - lastSpawnTime >= this.individualSpawnInterval && 
           groupIndividuals.leftGroupCount < groupIndividuals.maxIndividuals) {
         
-        const individual = this.individualManager.createIndividual(
+        const individual = this.individualManager.dispatchIndividual(
           group.id, 
-          group.position, 
-          group.size
+          group.position
         );
         
         if (individual) {
           this.lastIndividualSpawnTime.set(group.id, now);
-          Logger.info('GAME', 'Individual left group', { 
+          Logger.info('GAME', 'Individual dispatched from group', { 
             groupId: group.id, 
             individualId: individual.id 
           });
