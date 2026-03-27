@@ -3,22 +3,22 @@
  */
 
 import {
-  GameState,
-  GameConfig,
-  GameEvent,
-  DEFAULT_CONFIG,
   PeopleGroup,
-  Vector2,
+  GameConfig,
+  GameState,
+  GameEvent,
   EventCallback as GameEventCallback,
+  DEFAULT_CONFIG,
+  Vector2
 } from '../types';
 import {
-  createPeopleGroup,
   setGroupState,
   updateGroupFacing,
 } from './peopleGroup';
 import { distance, moveTowards } from './utils';
 import { GridManager } from './GridManager';
 import { TimeManager } from '../systems/TimeManager';
+import { TideManager } from '../systems/TideManager';
 import { GroupBehavior } from './GroupBehavior';
 import { IndividualManager } from './Individual';
 import { TerrainMap } from '../types/environment';
@@ -36,14 +36,13 @@ export class GameEngine {
   private individualManager: IndividualManager;
   private terrainMap: TerrainMap;
   private timeManager: TimeManager;
-  private lastSpawnTime: number = 0;
+  private tideManager: TideManager;
   private animationFrameId: number | null = null;
   /** Spawn tile centers (x, y) for exit and spawn. */
   private spawnTiles: Vector2[] = [];
   /** Event queue for buffering events */
   private eventQueue: GameEvent[] = [];
   /** Performance optimization settings */
-  private maxActiveGroups: number = 100;
   private lastGroupUpdate: Map<string, number> = new Map();
   private updateFrequency: number = 100; // ms between updates for distant groups
   /** Individual spawning settings */
@@ -56,16 +55,17 @@ export class GameEngine {
     this.gridManager = new GridManager(this.terrainMap.width, this.terrainMap.height);
     this.individualManager = new IndividualManager(terrainMap);
     this.timeManager = new TimeManager({
-      dayDurationMinutes: 10, // 10 real minutes = 1 game day
-      startTimeHour: 9 // Start at 9 AM
+      dayDurationMinutes: 1/24, // 1 real minute = 24 game hours
+      startTimeHour: 6 // Start at 6 AM (maximum tide)
     });
+    this.tideManager = new TideManager(terrainMap);
     this.groupBehavior = new GroupBehavior({
       settlementDurations: {
         individual: { min: 50000, max: 200000 },  // 50-200 seconds (short to long range)
         smallGroup: { min: 80000, max: 150000 }, // 80-150 seconds (shorter range)
         bigGroup: { min: 150000, max: 300000 }   // 150-300 seconds (long range)
       },
-      settlementRequirements: {} // No requirements for now
+      terrainMap: terrainMap.tiles // Pass terrain map for tide checks
     });
     this.state = this.createInitialState();
     this.initializeGrid();
@@ -236,10 +236,24 @@ export class GameEngine {
   }
 
   /**
-   * Get the time manager
+   * Get time manager
    */
   public getTimeManager(): TimeManager {
     return this.timeManager;
+  }
+
+  /**
+   * Get tide manager
+   */
+  public getTideManager(): TideManager {
+    return this.tideManager;
+  }
+
+  /**
+   * Set up tide change callback to force tile reload
+   */
+  public setupTideTileReload(tileReloadCallback: (changedTileKeys: string[]) => void): void {
+    this.tideManager.setOnTideChange(tileReloadCallback);
   }
 
   
@@ -283,11 +297,14 @@ export class GameEngine {
     // Update time manager
     this.timeManager.update();
 
+    // Update tide based on new time
+    this.tideManager.updateTide(this.timeManager.getTideInfo());
+
     // Process event queue first
     this.processEventQueue();
 
-    // Spawn new groups
-    this.updateSpawning();
+    // Spawn new groups (disabled for tide debugging)
+    // this.updateSpawning();
 
     // Update existing groups
     this.updateGroups(deltaTime);
@@ -302,41 +319,15 @@ export class GameEngine {
     this.cleanupGroups();
   }
 
-  private updateSpawning(): void {
-    const now = this.state.time;
-    
-    // Enforce maximum group limit for performance
-    if (this.state.groups.length >= this.maxActiveGroups) {
-      return;
-    }
-    
-    if (now - this.lastSpawnTime < this.config.spawnInterval) return;
-    if (Math.random() > this.config.spawnProbability) return;
-
-    this.lastSpawnTime = now;
-    this.spawnGroup();
-  }
-
-  private spawnGroup(): void {
-    // Use spawn tile position
-    if (this.spawnTiles.length === 0) return;
-    
-    const spawnPos = this.getSpawnTile();
-    const group = createPeopleGroup(spawnPos, this.config);
-    group.spawnTime = this.state.time; // Set spawn time to current game time
-    this.state.groups.push(group);
-    this.state.stats.totalGroupsSpawned++;
-
-    Logger.info('GAME', 'Group spawned at spawn tile');
-
-    this.on({ type: 'GROUP_SPAWNED', group });
-  }
-
-  
+  /**
+   * Update existing groups
+   * @param deltaTime Time elapsed since last update
+   */
   private updateGroups(deltaTime: number): void {
     this.state.groups.forEach(group => {
       if (this.shouldUpdateGroup(group, this.state.time)) {
         this.updateGroup(group, deltaTime);
+// ... (rest of the code remains the same)
         this.lastGroupUpdate.set(group.id, this.state.time);
       }
     });

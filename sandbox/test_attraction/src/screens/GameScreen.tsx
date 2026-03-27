@@ -85,6 +85,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ terrainMap, onBackToMenu
         spawnTilePosition={spawnTilePosition}
         groupBehavior={engineRef.current?.getGroupBehavior()}
         individualManager={engineRef.current?.getIndividualManager()}
+        engineRef={engineRef}
         onCameraSystemRef={(cameraSystem) => {
           cameraSystemRef.current = cameraSystem;
           // Process any queued events now that camera system is ready

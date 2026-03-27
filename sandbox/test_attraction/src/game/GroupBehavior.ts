@@ -1,10 +1,6 @@
 import { PeopleGroup, Vector2 } from '../types';
+import { TerrainType } from '../types/environment';
 import { setGroupState } from './peopleGroup';
-
-export interface SettlementRequirements {
-  // Future settlement requirements will go here
-  // For now, just check if tile is free
-}
 
 export interface GroupBehaviorConfig {
   settlementDurations: {
@@ -12,7 +8,7 @@ export interface GroupBehaviorConfig {
     smallGroup: { min: number; max: number }; // Shorter range
     bigGroup: { min: number; max: number }; // Long range
   };
-  settlementRequirements: SettlementRequirements;
+  terrainMap?: Map<string, TerrainType>; // Optional terrain map for tide checks
 }
 
 // Simple spatial grid for performance optimization
@@ -79,14 +75,16 @@ class SpatialGrid {
 
 export class GroupBehavior {
   private settlementDurations: GroupBehaviorConfig['settlementDurations'];
-  private settledGroups: Map<string, Vector2> = new Map(); // groupId -> center tile position
-  private occupiedTiles: Set<string> = new Set(); // Set of all occupied tile coordinates
-  private settlementAreas: Map<string, Vector2[]> = new Map(); // groupId -> all tiles in settlement area
+  private terrainMap?: Map<string, TerrainType>;
+  private occupiedTiles: Set<string> = new Set(); // Track occupied tiles
+  private settledGroups: Map<string, Vector2> = new Map(); // groupId -> position
+  private settlementAreas: Map<string, Vector2[]> = new Map(); // groupId -> area tiles
   private failedSettlementAttempts: Map<string, number> = new Map(); // groupId -> failed attempts
   private spatialGrid: SpatialGrid = new SpatialGrid();
 
   constructor(config: GroupBehaviorConfig) {
     this.settlementDurations = config.settlementDurations;
+    this.terrainMap = config.terrainMap;
   }
 
   /**
@@ -147,11 +145,19 @@ export class GroupBehavior {
     const areaSize = this.getSettlementAreaSize(groupSize);
     const areaTiles = this.getSettlementAreaTiles(tileX, tileY, areaSize.width, areaSize.height);
     
-    // Check if any tile in the area is already occupied
+    // Check if any tile in the area is already occupied or wet sand
     for (const tile of areaTiles) {
       const tileKey = `${tile.x},${tile.y}`;
       if (this.occupiedTiles.has(tileKey)) {
         return false;
+      }
+      
+      // Check for wet sand (groups can't settle on wet sand)
+      if (this.terrainMap) {
+        const terrainType = this.terrainMap.get(tileKey);
+        if (terrainType === 'wet_sand') {
+          return false;
+        }
       }
     }
     

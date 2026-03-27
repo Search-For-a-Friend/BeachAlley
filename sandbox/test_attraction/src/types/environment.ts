@@ -2,7 +2,7 @@
 
 export type EnvironmentType = 'seafront' | 'lake' | 'cove' | 'peninsula' | 'island';
 
-export type TerrainType = 'water' | 'sand' | 'grass' | 'spawn';
+export type TerrainType = 'water' | 'sand' | 'wet_sand' | 'grass' | 'spawn';
 
 export interface EnvironmentConfig {
   type: EnvironmentType;

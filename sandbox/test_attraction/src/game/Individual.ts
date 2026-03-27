@@ -49,19 +49,28 @@ export class ActivityManager {
   }
 
   private initializeActivities(): void {
-    // Find all water tiles and create activities
+    // Find all water tiles (excluding wet sand) and create activities
     this.terrainMap.tiles.forEach((type: string, key: string) => {
       if (type === 'water') {
-        const [row, col] = key.split(',').map(Number);
-        const position = { x: col, y: row };
-        this.activities.set(key, {
-          position,
-          type: 'water',
-          occupied: false,
-          occupiedBy: null
-        });
+        // Check if this is wet sand (shouldn't happen but double check)
+        const currentType = this.getCurrentTerrainType(key);
+        if (currentType === 'water') { // Only create activities on actual water
+          const [row, col] = key.split(',').map(Number);
+          const position = { x: col, y: row };
+          this.activities.set(key, {
+            position,
+            type: 'water',
+            occupied: false,
+            occupiedBy: null
+          });
+        }
       }
     });
+  }
+
+  // Get current terrain type (considering tide changes)
+  private getCurrentTerrainType(key: string): string {
+    return this.terrainMap.tiles.get(key) || 'unknown';
   }
 
   // Find nearest available activity

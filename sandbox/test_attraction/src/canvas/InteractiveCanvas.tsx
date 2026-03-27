@@ -6,6 +6,8 @@ import { TileLoader } from '../systems/TileLoader';
 import { InputHandler } from '../systems/InputHandler';
 import { CameraState } from '../types/canvas';
 import { CANVAS_CONFIG } from './config';
+import { GameEngine } from '../game/engine';
+import { GridManager } from '../game/GridManager';
 import { GameState } from '../types';
 import { TerrainMap } from '../types/environment';
 import { GroupBehavior } from '../game/GroupBehavior';
@@ -256,20 +258,21 @@ function findSandTileForCenter(terrainMap: TerrainMap): { row: number; col: numb
 
 export interface InteractiveCanvasProps {
   terrainMap: TerrainMap;
-  gameState?: GameState | null;
-  width?: number;
-  height?: number;
+  gameState: GameState | null;
+  width: number;
+  height: number;
   hoveredGroupId?: string | null;
   selectedGroupId?: string | null;
   onGroupClick?: (groupId: string) => void;
-  onGroupHover?: (groupId: string | null) => void;
-  gridManager?: any; // GridManager type from game engine
+  onGroupHover?: (groupId: string | undefined) => void;
+  gridManager?: GridManager;
   spawnTilePosition?: { x: number; y: number } | null;
   zoomLevel?: number;
-  onZoomChange?: (level: number) => void;
+  onZoomChange?: (zoomLevel: number) => void;
   onCameraSystemRef?: (cameraSystem: any) => void;
   groupBehavior?: GroupBehavior; // Add groupBehavior for settlement area access
   individualManager?: IndividualManager; // Add individualManager for individual rendering
+  engineRef?: React.MutableRefObject<GameEngine | null>; // Add engine reference for tide callback
 }
 
 export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
@@ -288,6 +291,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   onCameraSystemRef,
   groupBehavior,
   individualManager,
+  engineRef,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -317,6 +321,15 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [cameraSystem, onCameraSystemRef]);
 
   const [tileLoader] = useState<TileLoader>(() => new TileLoader(cameraSystem, terrainMap));
+
+  // Set up tide change callback to force tile reload
+  useEffect(() => {
+    if (engineRef?.current && tileLoader) {
+      engineRef.current.setupTideTileReload((changedTileKeys: string[]) => {
+        tileLoader.forceReloadTiles(changedTileKeys);
+      });
+    }
+  }, [engineRef?.current, tileLoader]);
   const inputHandlerRef = useRef<InputHandler | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
@@ -434,6 +447,9 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         switch (tile.terrainType) {
           case 'sand': 
             color = isSettledTile ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
+            break;
+          case 'wet_sand': 
+            color = '#8B7355'; // Darker brown for wet sand
             break;
           case 'water': color = '#4A90E2'; break;
           case 'grass': color = '#7EC850'; break;
@@ -641,7 +657,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         if (individualManager) {
           const allIndividuals = individualManager.getAllIndividuals();
           const activeIndividuals = allIndividuals.filter(individual => individual.state !== 'in_group');
-          console.log('Rendering individuals:', activeIndividuals.length, 'Total:', allIndividuals.length, 'Sprites ready:', spritesReady);
+          //console.log('Rendering individuals:', activeIndividuals.length, 'Total:', allIndividuals.length, 'Sprites ready:', spritesReady);
           activeIndividuals.forEach(individual => {
             const col = individual.position.x;
             const row = individual.position.y;
@@ -805,7 +821,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     if (!gameState) return;
     if (!onGroupHover) return;
 
-    let hoveredGroup: string | null = null;
+    let hoveredGroup: string | undefined = undefined;
     for (const group of gameState.groups) {
       if (group.state === 'visiting' || group.state === 'despawned') continue;
 

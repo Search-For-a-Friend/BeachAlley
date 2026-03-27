@@ -5,6 +5,13 @@ export interface TimeOfDay {
   totalMinutes: number;   // Total minutes since start
 }
 
+export interface TideInfo {
+  level: number;         // 0-1, tide level
+  isRising: boolean;     // Is tide rising or falling
+  amplitude: number;      // Number of tiles tide affects
+  sealineOffset: number;  // How many tiles from maximum sealine
+}
+
 export interface DayCycleConfig {
   dayDurationMinutes: number;  // How long a full day takes in real time
   startTimeHour: number;       // Starting hour (0-23)
@@ -15,6 +22,8 @@ export class TimeManager {
   private currentTime: TimeOfDay;
   private lastUpdateTime: number;
   private isPaused: boolean = false;
+  private tideAmplitude: number; // Random amplitude for this day (2-6)
+  private lastTideLevel: number = 0;
 
   constructor(config: DayCycleConfig) {
     this.config = config;
@@ -25,6 +34,8 @@ export class TimeManager {
       totalMinutes: config.startTimeHour * 60
     };
     this.lastUpdateTime = Date.now();
+    // Initialize random tide amplitude for this day (2-6 tiles)
+    this.tideAmplitude = Math.floor(Math.random() * 5) + 2;
   }
 
   // Update time based on real time elapsed
@@ -158,5 +169,49 @@ export class TimeManager {
     } else {
       return 0.2; // Night temperature
     }
+  }
+
+  // Get tide information
+  getTideInfo(): TideInfo {
+    const hour = this.currentTime.hour + this.currentTime.minute / 60;
+    
+    // Calculate tide level based on time
+    // 6:00 = max (1.0), 12:00 = min (0.0), 18:00 = max (1.0), 24:00 = min (0.0)
+    let tideLevel: number;
+    if (hour >= 6 && hour <= 18) {
+      // Daytime: falling from max to min to max
+      if (hour <= 12) {
+        // 6-12: falling from max to min
+        tideLevel = 1.0 - ((hour - 6) / 6);
+      } else {
+        // 12-18: rising from min to max
+        tideLevel = (hour - 12) / 6;
+      }
+    } else {
+      // Nighttime: falling from max to min
+      if (hour > 18) {
+        // 18-24: falling from max to min
+        tideLevel = 1.0 - ((hour - 18) / 6);
+      } else {
+        // 0-6: rising from min to max
+        tideLevel = hour / 6;
+      }
+    }
+    
+    const currentTideLevel = Math.max(0, Math.min(1, tideLevel));
+    const isRising = currentTideLevel > this.lastTideLevel;
+    this.lastTideLevel = currentTideLevel;
+    
+    return {
+      level: currentTideLevel,
+      isRising,
+      amplitude: this.tideAmplitude,
+      sealineOffset: Math.round((1 - currentTideLevel) * this.tideAmplitude)
+    };
+  }
+
+  // Reset tide amplitude for new day
+  resetTideAmplitude(): void {
+    this.tideAmplitude = Math.floor(Math.random() * 5) + 2;
   }
 }

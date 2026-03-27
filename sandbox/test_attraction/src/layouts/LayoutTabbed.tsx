@@ -15,12 +15,13 @@ interface LayoutTabbedProps {
   animationsEnabled?: boolean;
   onToggleAnimations?: () => void;
   terrainMap: TerrainMap;
-  gameState?: GameState | null;
+  gameState: GameState | null;
   gridManager?: any;
   spawnTilePosition?: { x: number; y: number } | null;
   onCameraSystemRef?: (cameraSystem: any) => void;
   groupBehavior?: GroupBehavior;
   individualManager?: IndividualManager;
+  engineRef?: React.MutableRefObject<any>; // Add engine ref for tide callback
 }
 
 type Tab = 'game' | 'build' | 'manage';
@@ -40,6 +41,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   onCameraSystemRef,
   groupBehavior,
   individualManager,
+  engineRef,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab | null>('game');
   const [openDrawer, setOpenDrawer] = useState<DrawerType>(null);
@@ -53,8 +55,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   const [drawerTransitionDirection, setDrawerTransitionDirection] = useState<'left' | 'right' | null>(null);
   
   // Group interaction state
-  const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [hoveredGroupId, setHoveredGroupId] = useState<string | undefined>(undefined);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | undefined>(undefined);
   
   // Zoom state (0-100%, current 100% default)
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -140,14 +142,14 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   // Group interaction handlers
   const handleGroupClick = (groupId: string) => {
     if (selectedGroupId === groupId) {
-      setSelectedGroupId(null);
+      setSelectedGroupId(undefined);
     } else {
       setSelectedGroupId(groupId);
       setOpenDrawer('groups'); // Open groups drawer when group is selected
     }
   };
 
-  const handleGroupHover = (groupId: string | null) => {
+  const handleGroupHover = (groupId: string | undefined) => {
     setHoveredGroupId(groupId);
   };
 
@@ -247,6 +249,8 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
         <InteractiveCanvas 
           terrainMap={terrainMap} 
           gameState={gameState}
+          width={800}
+          height={600}
           hoveredGroupId={hoveredGroupId}
           selectedGroupId={selectedGroupId}
           onGroupClick={handleGroupClick}
@@ -258,6 +262,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           onCameraSystemRef={onCameraSystemRef}
           groupBehavior={groupBehavior}
           individualManager={individualManager}
+          engineRef={engineRef}
         />
         
                 
@@ -561,7 +566,7 @@ const DrawerContent: React.FC<{
   toggleDrawer?: (drawer: DrawerType) => void;
   gameState?: GameState | null;
   selectedGroup?: any;
-  setSelectedGroupId?: (id: string | null) => void;
+  setSelectedGroupId?: (id: string | undefined) => void;
   individualManager?: IndividualManager;
 }> = ({ type, onClose, animationsEnabled = true, onToggleAnimations, onChangeLayout, toggleDrawer, gameState, selectedGroup, setSelectedGroupId, individualManager }) => {
   const getContent = () => {
@@ -591,7 +596,7 @@ const DrawerContent: React.FC<{
                 <>
                   <GroupDetailsPanel 
                     group={selectedGroup} 
-                    onClose={() => setSelectedGroupId && setSelectedGroupId(null)} 
+                    onClose={() => setSelectedGroupId && setSelectedGroupId(undefined)} 
                     individualManager={individualManager as IndividualManager}
                   />
                   <div style={styles.divider} />

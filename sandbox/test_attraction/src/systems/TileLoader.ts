@@ -86,4 +86,26 @@ export class TileLoader {
   getLoadedTiles(): Tile[] {
     return Array.from(this.loadedTiles.values());
   }
+
+  // Force reload specific tiles (for tide changes)
+  forceReloadTiles(changedTileKeys: string[]): void {
+    console.log(`[TileLoader] Force reloading ${changedTileKeys.length} specific tiles due to tide change`);
+    
+    changedTileKeys.forEach(tileKey => {
+      if (this.loadedTiles.has(tileKey)) {
+        const tile = this.loadedTiles.get(tileKey)!;
+        const updatedTile = this.createTile(tile.row, tile.col);
+        this.loadedTiles.set(tileKey, updatedTile);
+      }
+    });
+  }
+
+  // Force reload all loaded tiles (for debugging)
+  forceReloadAllTiles(): void {
+    console.log(`[TileLoader] Force reloading all ${this.loadedTiles.size} cached tiles`);
+    this.loadedTiles.forEach((tile, key) => {
+      const updatedTile = this.createTile(tile.row, tile.col);
+      this.loadedTiles.set(key, updatedTile);
+    });
+  }
 }
