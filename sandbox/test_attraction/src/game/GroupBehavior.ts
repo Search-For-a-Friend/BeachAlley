@@ -249,12 +249,20 @@ export class GroupBehavior {
     const areaSize = this.getSettlementAreaSize(group.size);
     const areaTiles = this.getSettlementAreaTiles(tileX, tileY, areaSize.width, areaSize.height);
     
-    // Check if any tile in area is already occupied
-    for (const tile of areaTiles) {
-      const tileKey = `${tile.x},${tile.y}`;
-      if (this.occupiedTiles.has(tileKey)) {
-        return; // Cannot settle here - area occupied
-      }
+    console.log('[SettleGroup Debug] Settling group:', {
+      groupId: group.id,
+      groupSize: group.size,
+      centerTile: `${tileY},${tileX}`,
+      areaSize,
+      areaTiles: areaTiles.map(t => `${t.y},${t.x}`)
+    });
+    
+    // Check if any tile in the area is already occupied
+    const isOccupied = areaTiles.some(tile => this.occupiedTiles.has(`${tile.y},${tile.x}`));
+    
+    if (isOccupied) {
+      console.log('[SettleGroup Debug] Settlement area is occupied, cannot settle');
+      return;
     }
 
     // Mark group as settled
@@ -283,6 +291,13 @@ export class GroupBehavior {
     (group as any).settlementDuration = settlementDuration; // Store for this specific group
     
     console.log(`Group ${group.id} (${group.size} people) settled at tile (${tileX}, ${tileY}) occupying ${areaTiles.length} tiles for ${Math.round(settlementDuration / 1000)}s`);
+    
+    // Force global cache invalidation by triggering a cache clear
+    if (typeof window !== 'undefined') {
+      console.log('[SettleGroup Debug] Triggering global cache invalidation');
+      // Set a flag to force cache clear on next render
+      (window as any).forceCacheInvalidation = true;
+    }
   }
 
   /**
@@ -339,15 +354,29 @@ export class GroupBehavior {
     const settlementArea = this.settlementAreas.get(group.id);
     if (!settledPosition || !settlementArea) return;
 
+    console.log('[UnsettleGroup Debug] Unsettling group:', {
+      groupId: group.id,
+      groupSize: group.size,
+      centerTile: `${settledPosition.y},${settledPosition.x}`,
+      settlementTiles: settlementArea.map(t => `${t.y},${t.x}`)
+    });
+
     // Remove from tracking
     this.settledGroups.delete(group.id);
     this.settlementAreas.delete(group.id);
     this.spatialGrid.removeGroup(group.id, settledPosition); // Remove from spatial grid
     
-    // Free all tiles in the settlement area
+    // Free all tiles in settlement area
     for (const tile of settlementArea) {
       const tileKey = `${tile.x},${tile.y}`;
       this.occupiedTiles.delete(tileKey);
+    }
+    
+    // Force global cache invalidation by triggering a cache clear
+    if (typeof window !== 'undefined') {
+      console.log('[UnsettleGroup Debug] Triggering global cache invalidation');
+      // Set a flag to force cache clear on next render
+      (window as any).forceCacheInvalidation = true;
     }
     
     // Random behavior for small groups and individuals
@@ -378,7 +407,7 @@ export class GroupBehavior {
     
     for (const [, areaTiles] of this.settlementAreas) {
       for (const tile of areaTiles) {
-        const tileKey = `${tile.x},${tile.y}`;
+        const tileKey = `${tile.y},${tile.x}`; // Fixed: use row,col format to match canvas
         settledTiles.add(tileKey);
       }
     }

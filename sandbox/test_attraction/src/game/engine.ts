@@ -47,7 +47,7 @@ export class GameEngine {
   private eventQueue: GameEvent[] = [];
   /** Performance optimization settings */
   private lastGroupUpdate: Map<string, number> = new Map();
-  private updateFrequency: number = 100; // ms between updates for distant groups
+  private updateFrequency: number = 100 / 60000; // 100ms = 0.00167 minutes between updates for distant groups
   /** Individual spawning settings */
   private lastIndividualSpawnTime: Map<string, number> = new Map();
   private individualSpawnInterval: number = 2000; // 2 seconds between spawns
@@ -55,7 +55,7 @@ export class GameEngine {
   constructor(config: Partial<GameConfig>, terrainMap: TerrainMap) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.terrainMap = terrainMap;
-    this.gridManager = new GridManager(this.terrainMap.width, this.terrainMap.height);
+    this.gridManager = new GridManager(this.terrainMap.width, this.terrainMap.height, this.terrainMap);
     this.individualManager = new IndividualManager(terrainMap);
     this.timeManager = new TimeManager({
       dayDurationMinutes: 1, // 1 real minute = 1 game day (24 hours)
@@ -149,8 +149,7 @@ export class GameEngine {
     const spawnTile = spawnCandidates[Math.floor(Math.random() * spawnCandidates.length)];
     Logger.info('GAME', 'Step 3: Selected spawn tile', { position: spawnTile, distance: spawnTile.distance });
 
-    // Set the spawn tile
-    this.gridManager.setTileType(spawnTile.col, spawnTile.row, 'spawn');
+    // Set the spawn tile (no longer needed - terrain map handles this)
     this.spawnTiles.push({ x: spawnTile.col + 0.5, y: spawnTile.row + 0.5 });
     Logger.info('GAME', 'Spawn tile generated', { position: spawnTile });
     
@@ -189,32 +188,7 @@ export class GameEngine {
   }
 
   private initializeGrid(): void {
-    // Initialize grid from terrain map
-    this.terrainMap.tiles.forEach((terrainType, key) => {
-      const [row, col] = key.split(',').map(Number);
-      
-      // Map terrain types to tile types
-      let tileType: 'path' | 'sand' | 'grass' | 'water';
-      switch (terrainType) {
-        case 'sand':
-          tileType = 'sand';
-          break;
-        case 'grass':
-          tileType = 'grass';
-          break;
-        case 'water':
-          tileType = 'water';
-          break;
-        case 'spawn':
-          tileType = 'grass'; // Spawn tiles are walkable like grass
-          break;
-        default:
-          tileType = 'path';
-      }
-      
-      this.gridManager.setTileType(col, row, tileType);
-    });
-
+    // Grid initialization simplified - terrain map handles everything directly
     Logger.info('GAME', 'Grid initialized from terrain map');
   }
 
@@ -316,25 +290,26 @@ export class GameEngine {
   public update(deltaTime: number): void {
     if (this.state.isPaused) return;
 
-    this.state.time += deltaTime;
-    
-    // Update time manager
+    // Update time manager first - this converts real deltaTime to game time
     this.timeManager.update(deltaTime);
-
+    
+    // Use game time for all game systems
+    const gameDeltaTimeMs = this.timeManager.timeConversion.realToGameMinutes(deltaTime) * 60 * 1000; // Convert game minutes to milliseconds
+    
+    // Update game state time (in game time units)
+    this.state.time = this.timeManager.getCurrentTime();
+    
     // Update tide based on new time
     this.tideManager.updateTide(this.timeManager.getTideInfo());
 
-    // Process event queue first
-    this.processEventQueue();
-
-    // Spawn new groups
+    // Update spawning
     this.updateSpawning();
 
-    // Update existing groups
-    this.updateGroups(deltaTime);
+    // Update existing groups using game time
+    this.updateGroups(gameDeltaTimeMs);
 
-    // Update individuals
-    this.updateIndividuals(deltaTime);
+    // Update individuals using game time
+    this.updateIndividuals(gameDeltaTimeMs);
 
     // Update spatial grid and settled groups
     this.groupBehavior.updateSettledGroups(this.state.groups, this.state.time);
@@ -344,14 +319,18 @@ export class GameEngine {
   }
   
   private updateSpawning(): void {
-    const now = this.state.time;
+    const now = this.state.time; // This is in game minutes
     
     // Enforce maximum group limit for performance
     if (this.state.groups.length >= this.maxActiveGroups) {
       return;
     }
     
-    if (now - this.lastSpawnTime < this.config.spawnInterval) return;
+    // Convert spawn interval from milliseconds to game minutes
+    // 3000ms = 3 seconds = 0.05 minutes at 1x speed
+    const spawnIntervalMinutes = this.config.spawnInterval / 60000; // Convert ms to minutes
+    
+    if (now - this.lastSpawnTime < spawnIntervalMinutes) return;
     if (Math.random() > this.config.spawnProbability) return;
 
     this.lastSpawnTime = now;
@@ -516,8 +495,12 @@ export class GameEngine {
 
       const lastSpawnTime = this.lastIndividualSpawnTime.get(group.id) || 0;
       
+      // Convert individual spawn interval from milliseconds to game minutes
+      // 2000ms = 2 seconds = 0.033 minutes at 1x speed
+      const individualSpawnIntervalMinutes = this.individualSpawnInterval / 60000; // Convert ms to minutes
+      
       // Check if it's time to dispatch a new individual (leave group)
-      if (now - lastSpawnTime >= this.individualSpawnInterval && 
+      if (now - lastSpawnTime >= individualSpawnIntervalMinutes && 
           groupIndividuals.leftGroupCount < groupIndividuals.maxIndividuals) {
         
         const individual = this.individualManager.dispatchIndividual(
@@ -547,22 +530,25 @@ export class GameEngine {
     }
   }
 
-  
-  private moveGroupTowards(group: PeopleGroup, target: Vector2, deltaTime: number): boolean {
+  private moveGroupTowards(group: PeopleGroup, target: Vector2, gameDeltaTimeMs: number): boolean {
     const oldPos = { ...group.position };
-    const speed = group.speed * this.config.groupSpeed;
-    const newPos = moveTowards(group.position, target, speed, deltaTime / 1000);
+    const speed = group.speed;
+    const newPos = moveTowards(group.position, target, speed, gameDeltaTimeMs / 1000);
     
     // Simple movement - just move towards target
     group.position = newPos;
     group.previousPosition = oldPos;
     updateGroupFacing(group);
     
-    // Return true only if the group has reached the target
+    // Return true only if group has reached target
     return newPos.x === target.x && newPos.y === target.y;
   }
 
-  
+  /**
+   * Find a random walkable position near the given start position
+   * @param startPos Start position
+   * @returns Random walkable position
+   */
   private findRandomWalkablePosition(startPos: Vector2): Vector2 {
     const attempts = 10;
     for (let i = 0; i < attempts; i++) {
@@ -685,13 +671,11 @@ export class GameEngine {
   }
 
   private isOnSand(group: PeopleGroup): boolean {
-    const tile = this.gridManager.getTile(Math.floor(group.position.x), Math.floor(group.position.y));
-    return tile?.type === 'sand'; // Sand tiles are mapped to 'sand' in grid
+    return this.gridManager.isOnSand(Math.floor(group.position.x), Math.floor(group.position.y));
   }
 
   private isPositionOnSand(position: Vector2): boolean {
-    const tile = this.gridManager.getTile(Math.floor(position.x), Math.floor(position.y));
-    return tile?.type === 'sand'; // Sand tiles are mapped to 'sand' in grid
+    return this.gridManager.isOnSand(Math.floor(position.x), Math.floor(position.y));
   }
 
   

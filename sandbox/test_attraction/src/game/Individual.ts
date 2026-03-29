@@ -1,3 +1,5 @@
+import { distance, moveTowards } from './utils';
+
 export interface Vector2 {
   x: number;
   y: number;
@@ -139,7 +141,7 @@ export class IndividualManager {
   private activityManager: ActivityManager;
   private nextIndividualId: number = 0;
   private BASE_ENJOYMENT_DURATION = 3000;
-  private INDIVIDUAL_SPEED = 2.0;
+  private INDIVIDUAL_SPEED = 0.15; // Exactly same as group speed
 
   constructor(terrainMap: any) {
     this.activityManager = new ActivityManager(terrainMap);
@@ -218,19 +220,19 @@ export class IndividualManager {
   }
 
   // Update individual logic
-  updateIndividual(individual: Individual, gameDeltaTime: number): void {
+  updateIndividual(individual: Individual, gameDeltaTimeMs: number): void {
     switch (individual.state) {
       case 'in_group':
         // Individuals in group don't move, just stay at group position
         break;
       case 'seeking':
-        this.updateSeeking(individual, gameDeltaTime);
+        this.updateSeeking(individual, gameDeltaTimeMs);
         break;
       case 'enjoying':
-        this.updateEnjoying(individual, gameDeltaTime);
+        this.updateEnjoying(individual, gameDeltaTimeMs);
         break;
       case 'returning':
-        this.updateReturning(individual, gameDeltaTime);
+        this.updateReturning(individual, gameDeltaTimeMs);
         break;
       case 'inactive':
         this.updateInactive(individual);
@@ -238,7 +240,7 @@ export class IndividualManager {
     }
   }
 
-  private updateSeeking(individual: Individual, deltaTime: number): void {
+  private updateSeeking(individual: Individual, gameDeltaTimeMs: number): void {
     if (!individual.targetPosition) {
       // Find nearest available water activity
       const activity = this.activityManager.findNearestAvailableActivity(individual.position);
@@ -253,7 +255,7 @@ export class IndividualManager {
       }
     } else {
       // Move toward target
-      this.moveIndividual(individual, deltaTime);
+      this.moveIndividual(individual, gameDeltaTimeMs);
       
       // Check if reached target
       if (this.hasReachedTarget(individual)) {
@@ -263,15 +265,15 @@ export class IndividualManager {
     }
   }
 
-  private updateEnjoying(individual: Individual, gameDeltaTime: number): void {
-    individual.enjoymentStartTime += gameDeltaTime;
+  private updateEnjoying(individual: Individual, gameDeltaTimeMs: number): void {
+    individual.enjoymentStartTime += gameDeltaTimeMs;
     
     if (individual.enjoymentStartTime >= individual.enjoymentDuration) {
       // Finished enjoying, return to group
       individual.targetPosition = individual.returnPosition;
       individual.state = 'returning';
       
-      // Release the activity
+      // Release activity
       if (individual.activityTarget) {
         this.activityManager.releaseActivity(individual.activityTarget, individual.id);
         individual.activityTarget = null;
@@ -279,9 +281,9 @@ export class IndividualManager {
     }
   }
 
-  private updateReturning(individual: Individual, deltaTime: number): void {
+  private updateReturning(individual: Individual, gameDeltaTimeMs: number): void {
     // Move toward return position
-    this.moveIndividual(individual, deltaTime);
+    this.moveIndividual(individual, gameDeltaTimeMs);
     
     // Check if reached group
     if (this.hasReachedTarget(individual)) {
@@ -299,18 +301,14 @@ export class IndividualManager {
     }
   }
 
-  private moveIndividual(individual: Individual, deltaTime: number): void {
+  private moveIndividual(individual: Individual, gameDeltaTimeMs: number): void {
     if (!individual.targetPosition) return;
 
-    const dx = individual.targetPosition.x - individual.position.x;
-    const dy = individual.targetPosition.y - individual.position.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    if (distance > 0.1) {
-      const moveDistance = Math.min(individual.speed * deltaTime / 1000, distance); // Use deltaTime in seconds
-      individual.position.x += (dx / distance) * moveDistance;
-      individual.position.y += (dy / distance) * moveDistance;
-    }
+    // Use exact same movement logic as groups
+    const newPos = moveTowards(individual.position, individual.targetPosition, individual.speed, gameDeltaTimeMs / 1000);
+    
+    // Update position
+    individual.position = newPos;
   }
 
   private hasReachedTarget(individual: Individual): boolean {

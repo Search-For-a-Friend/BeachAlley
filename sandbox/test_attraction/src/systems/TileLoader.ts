@@ -25,7 +25,7 @@ export class TileLoader {
   }
 
   private tileKey(row: number, col: number): string {
-    return `${col},${row}`;
+    return `${row},${col}`; // Fixed: use row,col format to match terrain map
   }
 
   getVisibleTileRange(canvasWidth: number, canvasHeight: number): VisibleTileRange {

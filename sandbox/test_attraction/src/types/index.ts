@@ -71,10 +71,10 @@ export interface GameConfig {
 export const DEFAULT_CONFIG: GameConfig = {
   canvasWidth: 800,
   canvasHeight: 600,
-  spawnInterval: 3000,
+  spawnInterval: 150000,
   spawnProbability: 0.8,
   maxGroups: 15,
-  groupSpeed: 1.5,
+  groupSpeed: 0.15,
   defaultServiceTime: 8000,
   satisfactionDecayRate: 2,
   moneyPerSecond: 5,

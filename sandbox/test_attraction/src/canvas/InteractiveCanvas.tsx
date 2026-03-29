@@ -1,6 +1,6 @@
 // Simplified canvas: terrain + groups only (no establishments)
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { CameraSystem } from '../systems/CameraSystem';
 import { TileLoader } from '../systems/TileLoader';
 import { InputHandler } from '../systems/InputHandler';
@@ -311,6 +311,7 @@ export interface InteractiveCanvasProps {
   individualManager?: IndividualManager; // Add individualManager for individual rendering
   engineRef?: React.MutableRefObject<GameEngine | null>; // Add engine reference for tide callback
   tideManager?: import('../systems/TideManager').TideManager; // Add tide manager for wet sand rendering
+  onTileUpdate?: (updateTile: (row: number, col: number) => void) => void; // Callback to provide tile update function
 }
 
 export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
@@ -324,13 +325,14 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   onGroupHover,
   gridManager,
   spawnTilePosition,
-  zoomLevel = 100,
+  zoomLevel,
   onZoomChange,
   onCameraSystemRef,
   groupBehavior,
   individualManager,
   engineRef,
   tideManager,
+  onTileUpdate, // Add tile update callback
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -397,6 +399,18 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const bigGroupSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
 
   const groupAnimRef = useRef<Map<string, { frameIndex: number; lastFrameTime: number }>>(new Map());
+
+  // Global tile update function - invalidates cache for specific tiles
+  const updateTile = useCallback((row: number, col: number) => {
+    const tileKey = `${row},${col}`;
+    tileCacheRef.current.delete(tileKey);
+    lastCacheInvalidationRef.current = performance.now();
+  }, []);
+
+  // Provide updateTile function to parent components
+  useEffect(() => {
+    onTileUpdate?.(updateTile);
+  }, [updateTile, onTileUpdate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -512,7 +526,15 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                            currentCameraState.worldY !== cameraStateRef.current.worldY ||
                            currentCameraState.zoom !== cameraStateRef.current.zoom;
       
-      // Invalidate cache if camera moved significantly
+      // Invalidate cache if camera moved significantly OR if force invalidation flag is set
+      const forceInvalidation = (window as any).forceCacheInvalidation;
+      if (forceInvalidation) {
+        console.log('[Canvas Debug] Force cache invalidation triggered');
+        tileCacheRef.current.clear();
+        lastCacheInvalidationRef.current = performance.now();
+        (window as any).forceCacheInvalidation = false; // Reset flag
+      }
+      
       if (cameraChanged) {
         const cameraMovement = Math.sqrt(
           Math.pow(currentCameraState.worldX - cameraStateRef.current.worldX, 2) +
@@ -543,7 +565,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         const { worldX, worldY } = cameraSystem.tileToWorld(tile.row, tile.col);
         const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
         
-        const tileKey = `${tile.col},${tile.row}`;
+        const tileKey = `${tile.row},${tile.col}`; // Fixed: use row,col format like other systems
         const cached = tileCacheRef.current.get(tileKey);
         
         // Check if we need to recompute values for this tile
@@ -560,6 +582,18 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           // Need to compute values - this is expensive, so we cache the result
           isSettledTile = groupBehavior?.getAllSettledTiles().has(tileKey) || false;
           
+          // Debug logging for settled tiles
+          if (tile.terrainType === 'sand' && isSettledTile) {
+            console.log('[Settled Tile Debug] Orange tile found:', { 
+              tileKey, 
+              row: tile.row, 
+              col: tile.col,
+              terrainType: tile.terrainType,
+              isSettledTile,
+              allSettledTiles: Array.from(groupBehavior?.getAllSettledTiles() || [])
+            });
+          }
+          
           // Calculate tile color
           switch (tile.terrainType) {
             case 'sand': 
@@ -569,6 +603,9 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 color = '#8B7355'; // Darker brown for wet sand
               } else {
                 color = isSettledTile ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
+                if (isSettledTile) {
+                  console.log('[Settled Tile Debug] Setting ORANGE color for tile:', tileKey);
+                }
               }
               break;
             case 'water': color = '#4A90E2'; isWetSand = false; break;
@@ -609,20 +646,26 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
       if (gameState) {
         // Draw special tile highlights first (underneath other elements)
-        if (gridManager) {
-          // Get all tiles from grid manager
-          const gridDimensions = gridManager.getDimensions();
+        if (gridManager && terrainMap) {
+          // Use terrain map dimensions instead of grid manager
+          const width = terrainMap.width;
+          const height = terrainMap.height;
           
-          for (let row = 0; row < gridDimensions.height; row++) {
-            for (let col = 0; col < gridDimensions.width; col++) {
-              const tile = gridManager.getTile(col, row);
-              if (!tile) continue;
+          for (let row = 0; row < height; row++) {
+            for (let col = 0; col < width; col++) {
+              // Get terrain type directly from terrain map
+              const terrainType = terrainMap.tiles.get(`${row},${col}`);
+              if (!terrainType) continue;
               
               const { worldX, worldY } = cameraSystem.tileToWorld(row, col);
               const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
               
-              // Highlight spawn tiles
-              if (tile.type === 'spawn') {
+              // Highlight spawn tiles (check if this position is a spawn tile)
+              const isSpawnTile = spawnTilePosition && 
+                Math.floor(spawnTilePosition.x) === col && 
+                Math.floor(spawnTilePosition.y) === row;
+              
+              if (isSpawnTile) {
                 ctx.fillStyle = 'rgba(255, 215, 0, 0.3)'; // Gold highlight for spawn
                 ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
                 ctx.lineWidth = 2;
@@ -853,7 +896,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 frameW,
                 frameH,
                 screenX - dw * ax,
-                screenY - dh * ay,
+                screenY + scaledH / 2 - dh * ay, // Fixed: add tile center offset like groups
                 dw,
                 dh
               );
@@ -879,8 +922,8 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 ctx.lineWidth = 1;
                 ctx.setLineDash([2, 2]);
                 ctx.beginPath();
-                ctx.moveTo(screenX, screenY);
-                ctx.lineTo(targetScreenX, targetScreenY);
+                ctx.moveTo(screenX, screenY + scaledH / 2); // Fixed: add tile center offset
+                ctx.lineTo(targetScreenX, targetScreenY + scaledH / 2); // Fixed: add tile center offset
                 ctx.stroke();
                 ctx.setLineDash([]);
               }
@@ -926,11 +969,61 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     terrainMap,
   ]);
 
+  // Convert screen coordinates to tile coordinates
+  const screenToTile = (screenX: number, screenY: number): { row: number; col: number } | null => {
+    const worldPos = cameraSystem.screenToWorld(screenX, screenY);
+    const tilePos = cameraSystem.worldToTile(worldPos.worldX, worldPos.worldY);
+    return tilePos;
+  };
+
+  // Log detailed tile information for debugging
+  const logTileInfo = (screenX: number, screenY: number): void => {
+    const tilePos = screenToTile(screenX, screenY);
+    if (!tilePos) {
+      console.log('[Tile Debug] Click outside map bounds');
+      return;
+    }
+
+    const { row, col } = tilePos;
+    const tileKey = `${row},${col}`; // Fixed: use row,col format like tileKey function
+    
+    // Get terrain type from terrain map
+    const terrainType = terrainMap.tiles.get(tileKey);
+    
+    // Get grid tile info using new GridManager method (should match terrain type)
+    const gridTileType = gridManager?.getTerrainType(col, row);
+    
+    // Check if tile is wet sand
+    const isWetSand = tideManager?.isTileWet(tileKey) || false;
+    
+    // Check if tile is settled
+    const isSettled = groupBehavior?.getAllSettledTiles().has(tileKey) || false;
+    
+    // Get individuals on this tile
+    const individualsOnTile = individualManager?.getAllIndividuals().filter(
+      individual => Math.floor(individual.position.x) === col && Math.floor(individual.position.y) === row
+    ) || [];
+
+    console.log('[Tile Debug] ===========================================');
+    console.log('[Tile Debug] Tile Position:', { row, col });
+    console.log('[Tile Debug] Tile Key:', tileKey);
+    console.log('[Tile Debug] Terrain Type:', terrainType);
+    console.log('[Tile Debug] Grid Tile Type:', gridTileType, '(should match terrain type)');
+    console.log('[Tile Debug] Types Match:', terrainType === gridTileType);
+    console.log('[Tile Debug] Is Wet Sand:', isWetSand);
+    console.log('[Tile Debug] Is Settled:', isSettled);
+    console.log('[Tile Debug] Individuals on Tile:', individualsOnTile.length, individualsOnTile.map(i => ({ id: i.id, state: i.state })));
+    console.log('[Tile Debug] ===========================================');
+  };
+
   // Mouse interaction handlers - now handled by InputHandler
   const handleElementClick = (x: number, y: number) => {
     if (!gameState) return;
     if (!onGroupClick) return;
 
+    let groupClicked = false;
+
+    // Check if clicking on a group first
     for (const group of gameState.groups) {
       if (group.state === 'visiting' || group.state === 'despawned') continue;
 
@@ -950,8 +1043,14 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
       if (distance <= radius + 5) {
         onGroupClick(group.id);
+        groupClicked = true;
         return;
       }
+    }
+
+    // If no group was clicked, log tile information
+    if (!groupClicked) {
+      logTileInfo(x, y);
     }
   };
 
