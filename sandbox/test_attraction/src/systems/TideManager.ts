@@ -120,32 +120,39 @@ export class TideManager {
       }
     }
     
-    // Shift sea line back by 'level' tiles
+    // Shift sea line back by 'level' tiles - only remove water adjacent to sand
     if (levelId > 0) {
       const tilesToConvert = new Set<string>();
       
-      // Find water tiles to convert to sand (shift back)
-      for (const seaLineKey of this.baseSeaLine) {
-        const [x, y] = seaLineKey.split(',').map(Number);
+      // For each level, find water tiles that should become sand
+      // Only convert water tiles that are adjacent to sand tiles
+      for (let currentLevel = 1; currentLevel <= levelId; currentLevel++) {
+        const currentTilesToConvert = new Set<string>();
         
-        // Convert water tiles in expanding pattern
-        for (let dx = -levelId; dx <= levelId; dx++) {
-          for (let dy = -levelId; dy <= levelId; dy++) {
-            const distance = Math.abs(dx) + Math.abs(dy);
-            if (distance <= levelId) {
-              const tileKey = `${x + dx},${y + dy}`;
-              if (waterTiles.has(tileKey)) {
-                tilesToConvert.add(tileKey);
-              }
+        // Find water tiles adjacent to sand at this level
+        for (const waterKey of waterTiles) {
+          const [x, y] = waterKey.split(',').map(Number);
+          
+          // Check if this water tile is adjacent to sand
+          const neighbors = [
+            [x-1, y], [x+1, y], [x, y-1], [x, y+1]
+          ];
+          
+          for (const [nx, ny] of neighbors) {
+            const neighborKey = `${nx},${ny}`;
+            if (sandTiles.has(neighborKey)) {
+              currentTilesToConvert.add(waterKey);
+              break;
             }
           }
         }
-      }
-      
-      // Apply conversions
-      for (const tileKey of tilesToConvert) {
-        waterTiles.delete(tileKey);
-        sandTiles.add(tileKey);
+        
+        // Apply conversions for this level
+        for (const tileKey of currentTilesToConvert) {
+          waterTiles.delete(tileKey);
+          sandTiles.add(tileKey);
+          tilesToConvert.add(tileKey);
+        }
       }
     }
     
@@ -195,7 +202,7 @@ export class TideManager {
         // Update wet sand tracking - tile is now water
         if (this.wetSandTiles.has(tileKey)) {
           this.wetSandTiles.delete(tileKey);
-          console.log(`[TideManager] Tile ${tileKey} became WATER (was wet sand)`);
+          // console.log(`[TideManager] Tile ${tileKey} became WATER (was wet sand)`);
         }
       }
     }
@@ -220,7 +227,7 @@ export class TideManager {
             wetSince: currentGameTime,
             lastWaterTime: currentGameTime
           });
-          console.log(`[TideManager] Tile ${tileKey} became WET (was water, now sand)`);
+          // console.log(`[TideManager] Tile ${tileKey} became WET (was water, now sand)`);
         }
       }
     }
@@ -243,8 +250,10 @@ export class TideManager {
     // Only update if tide level changed significantly
     if (Math.abs(tideLevel - this.lastTideLevel) < 0.01) return;
     
-    // Map tide level (0-1) to sea level index
-    const seaLevelIndex = Math.floor(tideLevel * (this.seaLevels.length - 1));
+    // Map tide level (0-1) to sea level index with better threshold distribution
+    // Instead of: 0.0-0.143->0, 0.143-0.286->1, ..., 0.857-1.0->6 (level 7 never reached)
+    // Use: 0.0-0.125->0, 0.125-0.250->1, ..., 0.875-1.0->7 (proper distribution)
+    const seaLevelIndex = Math.floor(tideLevel * this.seaLevels.length);
     const clampedIndex = Math.max(0, Math.min(seaLevelIndex, this.seaLevels.length - 1));
     
     // Only process and log when sea level actually changes
@@ -281,11 +290,6 @@ export class TideManager {
   // Check if a tile is wet sand
   isTileWet(tileKey: string): boolean {
     const isWet = this.wetSandTiles.has(tileKey);
-
-    // Debug: Log checks for wet sand occasionally
-    if (isWet) {
-      console.log(`[TideManager] isTileWet(${tileKey}): true (total wet tiles: ${this.wetSandTiles.size})`);
-    }
     return isWet;
   }
 

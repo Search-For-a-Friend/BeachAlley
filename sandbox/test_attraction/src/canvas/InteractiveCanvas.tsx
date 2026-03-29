@@ -324,16 +324,33 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   const [tileLoader] = useState<TileLoader>(() => new TileLoader(cameraSystem, terrainMap));
 
-  // Set up tide change callback to force tile reload
+  // Set up tide change callback to force tile reload and cache invalidation
   useEffect(() => {
     if (engineRef?.current && tileLoader) {
       engineRef.current.setupTideTileReload((changedTileKeys: string[]) => {
         tileLoader.forceReloadTiles(changedTileKeys);
+        // Invalidate cache for changed tiles
+        changedTileKeys.forEach(tileKey => {
+          tileCacheRef.current.delete(tileKey);
+        });
+        lastCacheInvalidationRef.current = performance.now();
+        lastTideChangeRef.current = performance.now();
       });
     }
   }, [engineRef?.current, tileLoader]);
-  const inputHandlerRef = useRef<InputHandler | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  const inputHandlerRef = useRef<InputHandler>();
+  const animationFrameRef = useRef<number>();
+
+  // Tile caching system - cache computed values to avoid expensive recalculations
+  const tileCacheRef = useRef<Map<string, { 
+    color: string; 
+    lastUpdate: number; 
+    isWetSand: boolean;
+    isSettledTile: boolean;
+  }>>(new Map());
+  const cameraStateRef = useRef<{ worldX: number; worldY: number; zoom: number }>({ worldX: 0, worldY: 0, zoom: 1 });
+  const lastCacheInvalidationRef = useRef<number>(0);
+  const lastTideChangeRef = useRef<number>(0); // Track when tide last changed
 
   const peopleSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
   const singleGroupSpriteRef = useRef<{ manifest: SpriteManifest; image: HTMLImageElement } | null>(null);
@@ -427,12 +444,36 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
     const render = () => {
       tileLoader.update(canvasSize.width, canvasSize.height);
+      
+      // Check if cache needs to be invalidated
+      const currentCameraState = cameraSystem.getState();
+      const cameraChanged = currentCameraState.worldX !== cameraStateRef.current.worldX ||
+                           currentCameraState.worldY !== cameraStateRef.current.worldY ||
+                           currentCameraState.zoom !== cameraStateRef.current.zoom;
+      
+      // Invalidate cache if camera moved significantly
+      if (cameraChanged) {
+        const cameraMovement = Math.sqrt(
+          Math.pow(currentCameraState.worldX - cameraStateRef.current.worldX, 2) +
+          Math.pow(currentCameraState.worldY - cameraStateRef.current.worldY, 2)
+        );
+        
+        // Only clear cache if camera moved more than 1 tile or zoom changed
+        if (cameraMovement > CANVAS_CONFIG.TILE_WIDTH || currentCameraState.zoom !== cameraStateRef.current.zoom) {
+          tileCacheRef.current.clear();
+          lastCacheInvalidationRef.current = performance.now();
+        }
+        
+        cameraStateRef.current = { worldX: currentCameraState.worldX, worldY: currentCameraState.worldY, zoom: currentCameraState.zoom };
+      }
+      
       ctx.fillStyle = '#87CEEB';
       ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
 
       const now = performance.now();
 
       const tiles = tileLoader.getLoadedTiles();
+      
       const zoom = cameraSystem.getState().zoom;
       const scaledW = CANVAS_CONFIG.TILE_WIDTH * zoom;
       const scaledH = CANVAS_CONFIG.TILE_HEIGHT * zoom;
@@ -440,38 +481,69 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       tiles.forEach(tile => {
         const { worldX, worldY } = cameraSystem.tileToWorld(tile.row, tile.col);
         const { screenX, screenY } = cameraSystem.worldToScreen(worldX, worldY);
+        
+        const tileKey = `${tile.col},${tile.row}`;
+        const cached = tileCacheRef.current.get(tileKey);
+        
+        // Check if we need to recompute values for this tile
+        let isWetSand: boolean;
+        let isSettledTile: boolean;
         let color: string;
         
-        // Check if this tile is part of any settlement area
-        const tileKey = `${tile.col},${tile.row}`;
-        const isSettledTile = groupBehavior?.getAllSettledTiles().has(tileKey) || false;
-        
-        switch (tile.terrainType) {
-          case 'sand': 
-            // Check if sand tile is wet (attribute, not terrain type)
-            const isWetSand = tideManager?.isTileWet(tileKey) || false;
-            if (isWetSand) {
-              color = '#8B7355'; // Darker brown for wet sand
-            } else {
-              color = isSettledTile ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
-            }
-            break;
-          case 'water': color = '#4A90E2'; break;
-          case 'grass': color = '#7EC850'; break;
-          case 'spawn': color = '#FFD700'; break; // Gold color for spawn tiles
-          default: color = '#CCCCCC';
+        if (cached && cached.lastUpdate >= lastCacheInvalidationRef.current) {
+          // Use cached values - no expensive computations!
+          isWetSand = cached.isWetSand;
+          isSettledTile = cached.isSettledTile;
+          color = cached.color;
+        } else {
+          // Need to compute values - this is expensive, so we cache the result
+          isSettledTile = groupBehavior?.getAllSettledTiles().has(tileKey) || false;
+          
+          // Calculate tile color
+          switch (tile.terrainType) {
+            case 'sand': 
+              // EXPENSIVE: Check if sand tile is wet - this is what we want to cache!
+              isWetSand = tideManager?.isTileWet(tileKey) || false;
+              if (isWetSand) {
+                color = '#8B7355'; // Darker brown for wet sand
+              } else {
+                color = isSettledTile ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
+              }
+              break;
+            case 'water': color = '#4A90E2'; isWetSand = false; break;
+            case 'grass': color = '#7EC850'; isWetSand = false; break;
+            case 'spawn': color = '#FFD700'; isWetSand = false; break;
+            default: color = '#CCCCCC'; isWetSand = false;
+          }
+          
+          // Cache the computed values
+          tileCacheRef.current.set(tileKey, { 
+            color, 
+            lastUpdate: now, 
+            isWetSand, 
+            isSettledTile 
+          });
         }
-        ctx.fillStyle = color;
-        ctx.strokeStyle = '#666666';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(screenX, screenY);
-        ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
-        ctx.lineTo(screenX, screenY + scaledH);
-        ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        
+        // Debug: Log first few tiles being computed
+        if (tile.col < 3 && tile.row < 3) {
+          console.log(`[Canvas] Computing tile ${tileKey}: color=${color}, isWet=${isWetSand}`);
+        }
+        
+        if (true) {
+          // Draw tile
+          ctx.fillStyle = color;
+          ctx.strokeStyle = '#666666';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(screenX, screenY);
+          ctx.lineTo(screenX + scaledW / 2, screenY + scaledH / 2);
+          ctx.lineTo(screenX, screenY + scaledH);
+          ctx.lineTo(screenX - scaledW / 2, screenY + scaledH / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
       });
 
       if (gameState) {

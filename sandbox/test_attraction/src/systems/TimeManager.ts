@@ -51,7 +51,7 @@ export class TimeManager {
   public timeConversion: TimeConversion;
 
   // Time speed control
-  private timeSpeed: number = 17280; // Default: 1 game day = 5s real time (24h * 60m * 60s / 5s = 17280 seconds)
+  private timeSpeed: number = 720; // Default: 1 game day = 5s real time (24h * 60m * 60s / 5s = 17280 seconds)
 
   constructor(config: DayCycleConfig) {
     this.currentTime = {
