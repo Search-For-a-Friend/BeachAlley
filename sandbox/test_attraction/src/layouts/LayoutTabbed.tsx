@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TopBar } from '../components/TopBar';
+import { TimeSpeedSlider } from '../components/TimeSpeedSlider';
 import { TerrainMap } from '../types/environment';
 import { GameState } from '../types';
 import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
@@ -22,6 +23,7 @@ interface LayoutTabbedProps {
   groupBehavior?: GroupBehavior;
   individualManager?: IndividualManager;
   engineRef?: React.MutableRefObject<any>; // Add engine ref for tide callback
+  tideManager?: import('../systems/TideManager').TideManager; // Add tide manager for wet sand rendering
 }
 
 type Tab = 'game' | 'build' | 'manage';
@@ -42,6 +44,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
   groupBehavior,
   individualManager,
   engineRef,
+  tideManager,
 }) => {
   const [activeTab, setActiveTab] = useState<Tab | null>('game');
   const [openDrawer, setOpenDrawer] = useState<DrawerType>(null);
@@ -244,6 +247,11 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
         onSettings={() => setOpenDrawer('settings')} 
       />
       
+      {/* Time Speed Control */}
+      <div style={{ position: 'absolute', top: '60px', right: '20px', zIndex: 1000, background: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '250px' }}>
+        <TimeSpeedSlider gameEngine={engineRef?.current} />
+      </div>
+      
       {/* Game View (never rescaled, full space) */}
       <div style={styles.gameView}>
         <InteractiveCanvas 
@@ -263,6 +271,7 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
           groupBehavior={groupBehavior}
           individualManager={individualManager}
           engineRef={engineRef}
+          tideManager={tideManager}
         />
         
                 

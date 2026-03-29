@@ -273,6 +273,7 @@ export interface InteractiveCanvasProps {
   groupBehavior?: GroupBehavior; // Add groupBehavior for settlement area access
   individualManager?: IndividualManager; // Add individualManager for individual rendering
   engineRef?: React.MutableRefObject<GameEngine | null>; // Add engine reference for tide callback
+  tideManager?: import('../systems/TideManager').TideManager; // Add tide manager for wet sand rendering
 }
 
 export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
@@ -292,6 +293,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   groupBehavior,
   individualManager,
   engineRef,
+  tideManager,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -446,10 +448,13 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         
         switch (tile.terrainType) {
           case 'sand': 
-            color = isSettledTile ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
-            break;
-          case 'wet_sand': 
-            color = '#8B7355'; // Darker brown for wet sand
+            // Check if sand tile is wet (attribute, not terrain type)
+            const isWetSand = tideManager?.isTileWet(tileKey) || false;
+            if (isWetSand) {
+              color = '#8B7355'; // Darker brown for wet sand
+            } else {
+              color = isSettledTile ? '#FFA500' : '#F4E4C1'; // Orange for settled sand tiles
+            }
             break;
           case 'water': color = '#4A90E2'; break;
           case 'grass': color = '#7EC850'; break;

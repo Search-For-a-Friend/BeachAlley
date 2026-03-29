@@ -5,6 +5,7 @@ import { TerrainMap, TerrainType } from '../types/environment';
 import { CANVAS_CONFIG, DEBUG_CONFIG } from '../canvas/config';
 import { CameraSystem } from './CameraSystem';
 
+// Interface for InteractiveCanvas compatibility
 export interface Tile {
   row: number;
   col: number;
@@ -24,7 +25,7 @@ export class TileLoader {
   }
 
   private tileKey(row: number, col: number): string {
-    return `${row},${col}`;
+    return `${col},${row}`;
   }
 
   getVisibleTileRange(canvasWidth: number, canvasHeight: number): VisibleTileRange {

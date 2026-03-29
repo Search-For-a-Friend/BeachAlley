@@ -9,6 +9,7 @@ export interface GroupBehaviorConfig {
     bigGroup: { min: number; max: number }; // Long range
   };
   terrainMap?: Map<string, TerrainType>; // Optional terrain map for tide checks
+  tideManager?: import('../systems/TideManager').TideManager; // Optional tide manager for wet sand checks
 }
 
 // Simple spatial grid for performance optimization
@@ -76,6 +77,17 @@ class SpatialGrid {
 export class GroupBehavior {
   private settlementDurations: GroupBehaviorConfig['settlementDurations'];
   private terrainMap?: Map<string, TerrainType>;
+  private tideManager?: import('../systems/TideManager').TideManager;
+  
+  // Add public getter for tideManager
+  getTideManager(): import('../systems/TideManager').TideManager | undefined {
+    return this.tideManager;
+  }
+  
+  // Add public setter for tideManager
+  setTideManager(tideManager: import('../systems/TideManager').TideManager): void {
+    this.tideManager = tideManager;
+  }
   private occupiedTiles: Set<string> = new Set(); // Track occupied tiles
   private settledGroups: Map<string, Vector2> = new Map(); // groupId -> position
   private settlementAreas: Map<string, Vector2[]> = new Map(); // groupId -> area tiles
@@ -85,6 +97,7 @@ export class GroupBehavior {
   constructor(config: GroupBehaviorConfig) {
     this.settlementDurations = config.settlementDurations;
     this.terrainMap = config.terrainMap;
+    this.tideManager = config.tideManager;
   }
 
   /**
@@ -153,9 +166,9 @@ export class GroupBehavior {
       }
       
       // Check for wet sand (groups can't settle on wet sand)
-      if (this.terrainMap) {
+      if (this.tideManager && this.terrainMap) {
         const terrainType = this.terrainMap.get(tileKey);
-        if (terrainType === 'wet_sand') {
+        if (terrainType === 'sand' && this.tideManager.isTileWet(tileKey)) {
           return false;
         }
       }

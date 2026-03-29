@@ -86,6 +86,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({ terrainMap, onBackToMenu
         groupBehavior={engineRef.current?.getGroupBehavior()}
         individualManager={engineRef.current?.getIndividualManager()}
         engineRef={engineRef}
+        tideManager={engineRef.current?.getTideManager()}
         onCameraSystemRef={(cameraSystem) => {
           cameraSystemRef.current = cameraSystem;
           // Process any queued events now that camera system is ready

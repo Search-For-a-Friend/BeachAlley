@@ -55,8 +55,9 @@ export class GameEngine {
     this.gridManager = new GridManager(this.terrainMap.width, this.terrainMap.height);
     this.individualManager = new IndividualManager(terrainMap);
     this.timeManager = new TimeManager({
-      dayDurationMinutes: 1/24, // 1 real minute = 24 game hours
-      startTimeHour: 6 // Start at 6 AM (maximum tide)
+      dayDurationMinutes: 1, // 1 real minute = 1 game day (24 hours)
+      startTimeHour: 6, // Start at 6 AM (maximum tide)
+      timeSpeed: 17280 // Default: 1 game day = 5s real time
     });
     this.tideManager = new TideManager(terrainMap);
     this.groupBehavior = new GroupBehavior({
@@ -67,6 +68,10 @@ export class GameEngine {
       },
       terrainMap: terrainMap.tiles // Pass terrain map for tide checks
     });
+    
+    // Set up tide system with TimeManager reference
+    this.tideManager.setTimeManager(this.timeManager);
+    this.groupBehavior.setTideManager(this.tideManager);
     this.state = this.createInitialState();
     this.initializeGrid();
     this.generateSpawnTile();
@@ -236,13 +241,6 @@ export class GameEngine {
   }
 
   /**
-   * Get time manager
-   */
-  public getTimeManager(): TimeManager {
-    return this.timeManager;
-  }
-
-  /**
    * Get tide manager
    */
   public getTideManager(): TideManager {
@@ -250,10 +248,33 @@ export class GameEngine {
   }
 
   /**
+   * Get time manager
+   */
+  public getTimeManager(): import('../systems/TimeManager').TimeManager {
+    return this.timeManager;
+  }
+
+  /**
+   * Set game time speed
+   */
+  public setTimeSpeed(speed: number): void {
+    this.timeManager.setTimeSpeed(speed);
+  }
+
+  /**
+   * Get current time speed
+   */
+  public getTimeSpeed(): number {
+    return this.timeManager.getTimeSpeed();
+  }
+
+  /**
    * Set up tide change callback to force tile reload
    */
   public setupTideTileReload(tileReloadCallback: (changedTileKeys: string[]) => void): void {
     this.tideManager.setOnTideChange(tileReloadCallback);
+    // Pass TimeManager reference to TideManager for time conversions
+    this.tideManager.setTimeManager(this.timeManager);
   }
 
   
@@ -295,7 +316,7 @@ export class GameEngine {
     this.state.time += deltaTime;
     
     // Update time manager
-    this.timeManager.update();
+    this.timeManager.update(deltaTime);
 
     // Update tide based on new time
     this.tideManager.updateTide(this.timeManager.getTideInfo());

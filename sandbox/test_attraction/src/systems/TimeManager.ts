@@ -1,8 +1,17 @@
+/**
+ * Centralized Game Time Manager
+ * 
+ * PRINCIPLES:
+ * 1. ONLY game time is used throughout the engine and all managers
+ * 2. All real-time conversions happen ONLY in TimeManager
+ * 3. No other component should reference Date.now() or real time directly
+ */
+
 export interface TimeOfDay {
-  hour: number;           // 0-23
-  minute: number;         // 0-59
+  hour: number;           // 0-23 (game hours)
+  minute: number;         // 0-59 (game minutes)
   day: number;            // Day number
-  totalMinutes: number;   // Total minutes since start
+  totalMinutes: number;   // Total game minutes since start
 }
 
 export interface TideInfo {
@@ -15,47 +24,78 @@ export interface TideInfo {
 export interface DayCycleConfig {
   dayDurationMinutes: number;  // How long a full day takes in real time
   startTimeHour: number;       // Starting hour (0-23)
+  timeSpeed: number;           // Speed multiplier for game time (1x = normal, 24x = fast)
+}
+
+export interface TimeConversion {
+  /**
+   * Convert game time to real time
+   * Game time runs at accelerated speed
+   */
+  gameToRealMs: (gameMinutes: number) => number;
+  
+  /**
+   * Convert real time to game time
+   * Real time to game time conversion
+   */
+  realToGameMinutes: (realMs: number) => number;
 }
 
 export class TimeManager {
-  private config: DayCycleConfig;
   private currentTime: TimeOfDay;
-  private lastUpdateTime: number;
   private isPaused: boolean = false;
-  private tideAmplitude: number; // Random amplitude for this day (2-6)
-  private lastTideLevel: number = 0;
+  private tideAmplitude: number = 4; // Initialize with default value
+  private lastTideLevel: number = -1;
+  
+  // Time conversion constants - calculated once
+  public timeConversion: TimeConversion;
+
+  // Time speed control
+  private timeSpeed: number = 17280; // Default: 1 game day = 5s real time (24h * 60m * 60s / 5s = 17280 seconds)
 
   constructor(config: DayCycleConfig) {
-    this.config = config;
     this.currentTime = {
       hour: config.startTimeHour,
       minute: 0,
       day: 1,
-      totalMinutes: config.startTimeHour * 60
+      totalMinutes: 0
     };
-    this.lastUpdateTime = Date.now();
-    // Initialize random tide amplitude for this day (2-6 tiles)
-    this.tideAmplitude = Math.floor(Math.random() * 5) + 2;
+    
+    // Initialize time conversion based on day duration and speed
+    this.timeConversion = {
+      gameToRealMs: (gameMinutes: number) => {
+        // With timeSpeed multiplier:
+        // 1 real second = timeSpeed game seconds
+        // 1 real minute = timeSpeed game minutes  
+        // 1 real minute = 60,000ms
+        // So 1 game minute = 60,000ms / timeSpeed
+        return (gameMinutes * 60000) / this.timeSpeed;
+      },
+      
+      realToGameMinutes: (realMs: number) => {
+        // Reverse conversion:
+        // realMs / 60000 = real minutes
+        // real minutes * timeSpeed = game minutes
+        return (realMs / 60000) * this.timeSpeed;
+      }
+    };
+    
+    // Initialize tide amplitude for first day
+    this.resetTideAmplitude();
   }
 
-  // Update time based on real time elapsed
-  update(): void {
+  // Core time methods - all work with game time only
+  update(deltaTime: number): void {
     if (this.isPaused) return;
 
-    const now = Date.now();
-    const deltaTime = now - this.lastUpdateTime;
-    this.lastUpdateTime = now;
-
-    // Convert real milliseconds to game minutes
-    const realMsPerGameMinute = (this.config.dayDurationMinutes * 60 * 1000) / (24 * 60);
-    const gameMinutesElapsed = deltaTime / realMsPerGameMinute;
-
-    this.currentTime.totalMinutes += gameMinutesElapsed;
+    // Convert real deltaTime to game deltaTime
+    const gameDeltaTime = this.timeConversion.realToGameMinutes(deltaTime);
+    
+    this.currentTime.totalMinutes += gameDeltaTime;
     this.updateTimeFromTotalMinutes();
   }
 
   private updateTimeFromTotalMinutes(): void {
-    // Calculate days, hours, minutes from total minutes
     const totalMinutesInDay = 24 * 60;
     
     this.currentTime.day = Math.floor(this.currentTime.totalMinutes / totalMinutesInDay) + 1;
@@ -65,7 +105,7 @@ export class TimeManager {
     this.currentTime.minute = Math.floor(minutesInCurrentDay % 60);
   }
 
-  // Getters
+  // Getters - all return game time values
   getTime(): TimeOfDay {
     return { ...this.currentTime };
   }
@@ -80,6 +120,11 @@ export class TimeManager {
 
   getDay(): number {
     return this.currentTime.day;
+  }
+
+  // Get current game time (replaces all real-time access)
+  getCurrentTime(): number {
+    return this.currentTime.totalMinutes;
   }
 
   // Get formatted time string
@@ -101,13 +146,12 @@ export class TimeManager {
     return 'night';
   }
 
-  // Check if it's daytime (for group spawning, etc.)
+  // Environment checks
   isDaytime(): boolean {
     const hour = this.currentTime.hour;
     return hour >= 6 && hour < 20; // 6 AM to 8 PM
   }
 
-  // Check if it's nighttime
   isNighttime(): boolean {
     return !this.isDaytime();
   }
@@ -119,7 +163,6 @@ export class TimeManager {
 
   resume(): void {
     this.isPaused = false;
-    this.lastUpdateTime = Date.now();
   }
 
   // Set time (for testing/debugging)
@@ -129,16 +172,15 @@ export class TimeManager {
     this.currentTime.totalMinutes = (this.currentTime.day - 1) * 24 * 60 + 
                                    this.currentTime.hour * 60 + 
                                    this.currentTime.minute;
-    this.lastUpdateTime = Date.now();
   }
 
-  // Get sun position (0-1, where 0.5 is noon)
+  // Sun position (0-1, where 0.5 is noon)
   getSunPosition(): number {
     const hour = this.currentTime.hour + this.currentTime.minute / 60;
     return (hour - 6) / 12; // 6 AM = 0, 6 PM = 1
   }
 
-  // Get light intensity (0-1)
+  // Light intensity (0-1)
   getLightIntensity(): number {
     const hour = this.currentTime.hour + this.currentTime.minute / 60;
     
@@ -155,7 +197,7 @@ export class TimeManager {
     }
   }
 
-  // Get temperature factor (0-1, where 1 is hottest)
+  // Temperature factor (0-1, where 1 is hottest)
   getTemperatureFactor(): number {
     const hour = this.currentTime.hour + this.currentTime.minute / 60;
     
@@ -171,11 +213,11 @@ export class TimeManager {
     }
   }
 
-  // Get tide information
+  // Tide information - PURE GAME TIME CALCULATIONS
   getTideInfo(): TideInfo {
     const hour = this.currentTime.hour + this.currentTime.minute / 60;
     
-    // Calculate tide level based on time
+    // Calculate tide level based on game time only
     // 6:00 = max (1.0), 12:00 = min (0.0), 18:00 = max (1.0), 24:00 = min (0.0)
     let tideLevel: number;
     if (hour >= 6 && hour <= 18) {
@@ -210,8 +252,41 @@ export class TimeManager {
     };
   }
 
+  // Check if enough game time has passed since last update
+  hasGameTimePassed(gameMinutes: number, sinceGameTime: number): boolean {
+    return this.currentTime.totalMinutes - sinceGameTime >= gameMinutes;
+  }
+
+  // Get game time elapsed since a specific game time
+  getGameTimeElapsed(sinceGameTime: number): number {
+    return this.currentTime.totalMinutes - sinceGameTime;
+  }
+
+  // Time speed control methods
+  setTimeSpeed(speed: number): void {
+    this.timeSpeed = Math.max(1, Math.min(17280, speed)); // Clamp between 1x (real time) and 17280x (1 game day = 5s)
+    console.log(`[TimeManager] Time speed set to ${this.timeSpeed}x`);
+    
+    // Recalculate time conversion with new speed
+    this.timeConversion = {
+      gameToRealMs: (gameMinutes: number) => {
+        return (gameMinutes * 60000) / this.timeSpeed;
+      },
+      
+      realToGameMinutes: (realMs: number) => {
+        return (realMs / 60000) * this.timeSpeed;
+      }
+    };
+  }
+
+  getTimeSpeed(): number {
+    return this.timeSpeed;
+  }
+
   // Reset tide amplitude for new day
   resetTideAmplitude(): void {
+    // Random amplitude between 2-6 tiles
     this.tideAmplitude = Math.floor(Math.random() * 5) + 2;
+    console.log(`[TimeManager] New tide amplitude: ${this.tideAmplitude} tiles`);
   }
 }
