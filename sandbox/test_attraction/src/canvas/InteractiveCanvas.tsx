@@ -126,6 +126,43 @@ const zoomControlStyles = {
   },
 };
 
+const timeControlStyles = {
+  timeControl: {
+    position: 'absolute' as const,
+    top: '20px',
+    left: '80px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px',
+    background: 'rgba(26, 26, 46, 0.95)',
+    borderRadius: '10px',
+    border: '1px solid rgba(0, 255, 255, 0.3)',
+    backdropFilter: 'blur(10px)',
+    zIndex: 1000,
+  },
+  timeLabel: {
+    fontSize: '0.9rem',
+    color: '#00ffff',
+    textAlign: 'center' as const,
+  },
+  timeSlider: {
+    WebkitAppearance: 'slider-vertical' as const,
+    width: '30px',
+    height: '120px',
+    background: 'transparent',
+    outline: 'none',
+  },
+  timeValue: {
+    fontSize: '0.8rem',
+    color: '#fff',
+    textAlign: 'center' as const,
+    minWidth: '50px',
+    fontFamily: 'monospace',
+  },
+};
+
 async function loadSpriteManifest(url: URL): Promise<SpriteManifest> {
   const res = await fetch(url.toString());
   if (!res.ok) {
@@ -300,6 +337,8 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const initialSize = { width: width || 800, height: height || 600 };
   const [canvasSize, setCanvasSize] = useState(initialSize);
   const [spritesReady, setSpritesReady] = useState(false);
+  const [timeSpeed, setTimeSpeed] = useState(24);
+  const [timeSliderValue, setTimeSliderValue] = useState(50);
   const mapDimensions = { rows: terrainMap.height, cols: terrainMap.width };
   const [cameraSystem] = useState<CameraSystem>(() => {
     const zoom = (zoomLevel / 100) * CANVAS_CONFIG.INITIAL_ZOOM;
@@ -434,6 +473,28 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     inputHandlerRef.current = inputHandler;
     return () => inputHandler.destroy();
   }, [cameraSystem]);
+
+  useEffect(() => {
+    if (engineRef?.current && engineRef.current.getTimeSpeed) {
+      const currentSpeed = engineRef.current.getTimeSpeed();
+      setTimeSpeed(currentSpeed);
+      // Convert current speed back to slider value (0-100)
+      const logValue = (Math.log(currentSpeed) / Math.log(17280)) * 100;
+      setTimeSliderValue(Math.max(0, Math.min(100, logValue)));
+    }
+  }, [engineRef]);
+
+  const handleTimeSpeedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newSliderValue = parseFloat(e.target.value);
+    setTimeSliderValue(newSliderValue);
+    // Convert linear slider (0-100) to logarithmic scale (1-17280)
+    const logSpeed = Math.exp((newSliderValue / 100) * Math.log(17280));
+    const newSpeed = Math.max(1, Math.min(17280, logSpeed));
+    setTimeSpeed(newSpeed);
+    if (engineRef?.current && engineRef.current.setTimeSpeed) {
+      engineRef.current.setTimeSpeed(newSpeed);
+    }
+  };
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -963,6 +1024,22 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             aria-label="Zoom level"
           />
           <div style={zoomControlStyles.zoomValue}>{zoomLevel}%</div>
+        </div>
+
+        {/* Vertical Time Speed Slider */}
+        <div style={timeControlStyles.timeControl}>
+          <div style={timeControlStyles.timeLabel}>🕐</div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value={timeSliderValue}
+            onChange={handleTimeSpeedChange}
+            style={timeControlStyles.timeSlider}
+            aria-label="Time speed"
+          />
+          <div style={timeControlStyles.timeValue}>{Math.round(timeSpeed)}x</div>
         </div>
 
         {/* Center on Spawn Button */}

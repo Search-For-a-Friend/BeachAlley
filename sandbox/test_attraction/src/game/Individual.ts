@@ -218,19 +218,19 @@ export class IndividualManager {
   }
 
   // Update individual logic
-  updateIndividual(individual: Individual, deltaTime: number): void {
+  updateIndividual(individual: Individual, gameDeltaTime: number): void {
     switch (individual.state) {
       case 'in_group':
         // Individuals in group don't move, just stay at group position
         break;
       case 'seeking':
-        this.updateSeeking(individual, deltaTime);
+        this.updateSeeking(individual, gameDeltaTime);
         break;
       case 'enjoying':
-        this.updateEnjoying(individual, deltaTime);
+        this.updateEnjoying(individual, gameDeltaTime);
         break;
       case 'returning':
-        this.updateReturning(individual, deltaTime);
+        this.updateReturning(individual, gameDeltaTime);
         break;
       case 'inactive':
         this.updateInactive(individual);
@@ -258,15 +258,15 @@ export class IndividualManager {
       // Check if reached target
       if (this.hasReachedTarget(individual)) {
         individual.state = 'enjoying';
-        individual.enjoymentStartTime = Date.now();
+        individual.enjoymentStartTime = 0; // Reset for game time counting
       }
     }
   }
 
-  private updateEnjoying(individual: Individual, _deltaTime: number): void {
-    const now = Date.now();
+  private updateEnjoying(individual: Individual, gameDeltaTime: number): void {
+    individual.enjoymentStartTime += gameDeltaTime;
     
-    if (now - individual.enjoymentStartTime >= individual.enjoymentDuration) {
+    if (individual.enjoymentStartTime >= individual.enjoymentDuration) {
       // Finished enjoying, return to group
       individual.targetPosition = individual.returnPosition;
       individual.state = 'returning';

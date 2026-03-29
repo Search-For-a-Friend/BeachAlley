@@ -12,6 +12,7 @@ import {
   Vector2
 } from '../types';
 import {
+  createPeopleGroup,
   setGroupState,
   updateGroupFacing,
 } from './peopleGroup';
@@ -35,6 +36,8 @@ export class GameEngine {
   private groupBehavior: GroupBehavior;
   private individualManager: IndividualManager;
   private terrainMap: TerrainMap;
+  private lastSpawnTime: number = 0;
+  private maxActiveGroups: number = 100;
   private timeManager: TimeManager;
   private tideManager: TideManager;
   private animationFrameId: number | null = null;
@@ -191,10 +194,10 @@ export class GameEngine {
       const [row, col] = key.split(',').map(Number);
       
       // Map terrain types to tile types
-      let tileType: 'path' | 'grass' | 'water';
+      let tileType: 'path' | 'sand' | 'grass' | 'water';
       switch (terrainType) {
         case 'sand':
-          tileType = 'path';
+          tileType = 'sand';
           break;
         case 'grass':
           tileType = 'grass';
@@ -324,8 +327,8 @@ export class GameEngine {
     // Process event queue first
     this.processEventQueue();
 
-    // Spawn new groups (disabled for tide debugging)
-    // this.updateSpawning();
+    // Spawn new groups
+    this.updateSpawning();
 
     // Update existing groups
     this.updateGroups(deltaTime);
@@ -338,6 +341,36 @@ export class GameEngine {
 
     // Clean up despawned groups
     this.cleanupGroups();
+  }
+  
+  private updateSpawning(): void {
+    const now = this.state.time;
+    
+    // Enforce maximum group limit for performance
+    if (this.state.groups.length >= this.maxActiveGroups) {
+      return;
+    }
+    
+    if (now - this.lastSpawnTime < this.config.spawnInterval) return;
+    if (Math.random() > this.config.spawnProbability) return;
+
+    this.lastSpawnTime = now;
+    this.spawnGroup();
+  }
+
+  private spawnGroup(): void {
+    // Use spawn tile position
+    if (this.spawnTiles.length === 0) return;
+    
+    const spawnPos = this.getSpawnTile();
+    const group = createPeopleGroup(spawnPos, this.config);
+    group.spawnTime = this.state.time; // Set spawn time to current game time
+    this.state.groups.push(group);
+    this.state.stats.totalGroupsSpawned++;
+
+    Logger.info('GAME', 'Group spawned at spawn tile');
+
+    this.on({ type: 'GROUP_SPAWNED', group });
   }
 
   /**
@@ -653,12 +686,12 @@ export class GameEngine {
 
   private isOnSand(group: PeopleGroup): boolean {
     const tile = this.gridManager.getTile(Math.floor(group.position.x), Math.floor(group.position.y));
-    return tile?.type === 'path'; // Sand tiles are mapped to 'path' in grid
+    return tile?.type === 'sand'; // Sand tiles are mapped to 'sand' in grid
   }
 
   private isPositionOnSand(position: Vector2): boolean {
     const tile = this.gridManager.getTile(Math.floor(position.x), Math.floor(position.y));
-    return tile?.type === 'path'; // Sand tiles are mapped to 'path' in grid
+    return tile?.type === 'sand'; // Sand tiles are mapped to 'sand' in grid
   }
 
   

@@ -42,7 +42,7 @@ export class GridManager {
     for (let row = 0; row < terrainMap.height; row++) {
       for (let col = 0; col < terrainMap.width; col++) {
         const type = terrainMap.tiles.get(tileKey(row, col)) || 'water';
-        const tileType: TileType = type === 'water' ? 'water' : 'path';
+        const tileType: TileType = type === 'water' ? 'water' : type === 'sand' ? 'sand' : type === 'grass' ? 'grass' : 'path';
         this.setTileType(col, row, tileType);
       }
     }

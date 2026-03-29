@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { TopBar } from '../components/TopBar';
-import { TimeSpeedSlider } from '../components/TimeSpeedSlider';
 import { TerrainMap } from '../types/environment';
 import { GameState } from '../types';
 import { InteractiveCanvas } from '../canvas/InteractiveCanvas';
@@ -246,11 +245,6 @@ export const LayoutTabbed: React.FC<LayoutTabbedProps> = ({
         onBack={onBack} 
         onSettings={() => setOpenDrawer('settings')} 
       />
-      
-      {/* Time Speed Control */}
-      <div style={{ position: 'absolute', top: '60px', right: '20px', zIndex: 1000, background: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', width: '250px' }}>
-        <TimeSpeedSlider gameEngine={engineRef?.current} />
-      </div>
       
       {/* Game View (never rescaled, full space) */}
       <div style={styles.gameView}>

@@ -5,6 +5,7 @@
 
 export type TileType =
   | 'path'
+  | 'sand'
   | 'spawn'
   | 'grass'
   | 'entrance'
@@ -23,10 +24,11 @@ export interface Tile {
 
 export const TILE_MOVEMENT_COSTS: Record<TileType, number> = {
   path: 1.0,
+  sand: 1.0,
   spawn: 1.0,
   grass: 1.5,
   entrance: 1.0,
   building: Infinity,
   water: Infinity,
-  restricted: 2.0,
+  restricted: Infinity
 };
